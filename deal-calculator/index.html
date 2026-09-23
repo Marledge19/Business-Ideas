@@ -96,7 +96,7 @@ input.v:focus{outline:none;border-color:var(--focus);background:var(--panel)}
 
 /* results */
 .results{display:flex;flex-direction:column;gap:16px;min-width:0}
-.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:10px}
 .tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
 .tile .k{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .tile .val{font:600 21px/1.2 var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
@@ -161,6 +161,8 @@ select.fsel{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(-
 @media (max-width:520px){.thbig{grid-template-columns:1fr 1fr}.thbig b{font-size:19px}}
 .thtab td i{display:block;font-style:normal;font-size:11px;color:var(--faint)}
 .thtab td{white-space:normal}
+.exportbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:8px 14px;font-size:12px;color:var(--muted)}
+.exportbar button:disabled{opacity:.6;cursor:progress}
 /* view switch */
 .views{display:inline-flex;border:1px solid var(--line-strong);border-radius:5px;overflow:hidden}
 .views button{border:0;border-radius:0;padding:7px 14px;font-size:13px;background:var(--panel);color:var(--muted)}
@@ -314,6 +316,7 @@ select.fsel{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(-
     <aside class="inputs" id="inputs" aria-label="Deal inputs"></aside>
 
     <main class="results">
+      <div class="exportbar"><span>Everything on this screen, the quick screen verdict, taxes and inputs in one workbook.</span><button type="button" id="btnExport" class="primary">Export to Excel</button></div>
       <div class="tiles" id="tiles"></div>
 
       <section class="panel">
@@ -1535,6 +1538,165 @@ document.getElementById("btnCopy").addEventListener("click", function(){
     try{ document.execCommand("copy"); toast("Summary copied"); }catch(_){ toast("Copy blocked by browser"); }
     document.body.removeChild(ta);
   });
+});
+/* ---------- export to Excel ---------- */
+var XLSX_SRC = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+var FMT = {money:'$#,##0;[Red]-$#,##0', mult:'0.00"x"', pct:'0.0%', yrs:'0.0" yrs"'};
+function loadXLSX(){
+  if(window.XLSX) return Promise.resolve(window.XLSX);
+  return new Promise(function(res, rej){
+    var sc = document.createElement("script"); sc.src = XLSX_SRC;
+    sc.onload = function(){ window.XLSX ? res(window.XLSX) : rej(new Error("load")); };
+    sc.onerror = function(){ rej(new Error("load")); };
+    document.head.appendChild(sc);
+  });
+}
+function cell(v, z){ return isFinite(v) ? {v:v, t:"n", z:z} : {v:"n/a", t:"s"}; }
+function M(v){ return cell(v, FMT.money); }
+function X(v){ return cell(v, FMT.mult); }
+function P(v){ return cell(v/100, FMT.pct); }   // v in percent points
+function plain(html){ var d = document.createElement("div"); d.innerHTML = html; return d.textContent; }
+function sheet(XL, rows, widths){
+  var ws = XL.utils.aoa_to_sheet(rows.map(function(r){ return r.map(function(c){ return c && typeof c === "object" ? c.v : c; }); }));
+  rows.forEach(function(r, ri){ r.forEach(function(c, ci){
+    if(c && typeof c === "object"){ var a = XL.utils.encode_cell({r:ri, c:ci}); ws[a].t = c.t || ws[a].t; if(c.z) ws[a].z = c.z; }
+  }); });
+  ws["!cols"] = widths.map(function(w){ return {wch:w}; });
+  return ws;
+}
+function buildWorkbook(XL){
+  var s = last.s, R = last.R, v = s.v, q = s.q, T = s.t, today = new Date().toISOString().slice(0,10);
+  var name = (s.name || "").trim() || "Untitled deal";
+  var b = R.sc.base, lf = q.listing && q.listing.facts;
+  // Read from structure, not innerText: the quick screen is hidden while this screen is open.
+  var liText = function(sel){ return Array.prototype.map.call(document.querySelectorAll(sel), function(li){
+    var pill = li.querySelector(".pill"), t = li.querySelector(".t"), small = t && t.querySelector("small"), m = li.querySelector(".m"), parts = [];
+    if(pill) parts.push("[" + pill.textContent + "]");
+    if(t){ var title = Array.prototype.filter.call(t.childNodes, function(n){ return n.nodeType === 3; }).map(function(n){ return n.textContent; }).join("").trim(); if(title) parts.push(title); }
+    else parts.push(li.lastElementChild ? li.lastElementChild.textContent : li.textContent);
+    if(m && m.textContent) parts.push("(" + m.textContent + ")");
+    if(small) parts.push("— " + small.textContent);
+    return parts.join(" ");
+  }); };
+
+  // Summary
+  var sum = [[name + " — underwriting"], ["Exported " + today + " from Main Street Deal Calculator"], [],
+    ["Quick screen verdict", last.screen ? last.screen.verdict : plain(document.getElementById("qVerdict").querySelector(".word").textContent)],
+    ["Why", last.screen ? last.screen.why : plain(document.getElementById("qVerdict").querySelector("p").textContent)],
+    ["Offer guidance", plain(document.getElementById("qTarget").innerHTML.replace(/<br\s*\/?>/gi, " "))], [],
+    ["Key numbers (base case, year 1)", ""],
+    ["Purchase price" + (q.extra > 0 ? " (incl. extras)" : ""), M(v.price)], ["Revenue", M(v.revenue)], ["SDE" + (q.sdeEst ? " (estimated: " + q.sdeMethod + ")" : ""), M(v.sde)], ["EBITDA" + (link.ebitdaEst ? " (estimated)" : ""), M(v.ebitda)],
+    ["Price / SDE", X(R.ttm.sdeMult)], ["Price / EBITDA", X(R.ttm.ebitdaMult)], ["Price / revenue", X(R.ttm.revMult)],
+    ["Cash needed at close", M(R.cash)], ["Annual debt service", M(b.ds)], ["Monthly debt service", M(b.mo)],
+    ["DSCR — base", X(b.dscr)], ["DSCR — conservative", X(R.sc.cons.dscr)],
+    ["Cash after debt, before tax", M(b.cfad)], ["Cash after hiring a manager", M(b.cfm)],
+    ["Take-home after tax, per year", M(b.th.net)], ["Take-home after tax, per month", M(b.th.net/12)],
+    ["Payback (before your pay)", cell(b.payback, FMT.yrs)], ["Break-even revenue", M(b.be)], []];
+  sum.push(["Warnings (full model)"]); liText("#flags li").forEach(function(t){ sum.push(["", t]); });
+  sum.push([]); sum.push(["Quick screen checks"]); liText("#qWhy li").forEach(function(t){ sum.push(["", t]); });
+  sum.push([]); sum.push(["Estimates only, not financial or tax advice. Verify with the seller's records, a lender and a CPA."]);
+
+  // Scenarios
+  var rowsSpec = [
+    ["Revenue", function(o){ return M(o.rev); }], ["SDE", function(o){ return M(o.sde); }], ["EBITDA", function(o){ return M(o.ebitda); }], ["SDE margin", function(o){ return P(o.margin); }],
+    ["Bank / SBA monthly", function(o){ return M(o.notes[0].m); }], ["Seller note monthly", function(o){ return M(o.notes[1].m); }], ["Other note monthly", function(o){ return M(o.notes[2].m); }],
+    ["Total monthly debt service", function(o){ return M(o.mo); }], ["Annual debt service", function(o){ return M(o.ds); }],
+    ["DSCR", function(o){ return X(o.dscr); }], ["DSCR with manager", function(o){ return X(o.dscrM); }],
+    ["Cash flow before debt (SDE − capex)", function(o){ return M(o.cfb); }], ["Cash flow after debt", function(o){ return M(o.cfad); }],
+    ["Over / under your draw", function(o){ return M(o.overDraw); }], ["Cash flow after hiring a manager", function(o){ return M(o.cfm); }],
+    ["Estimated taxes (federal + AL + SE)", function(o){ return M(o.th.total); }], ["Take-home per year", function(o){ return M(o.th.net); }], ["Take-home per month", function(o){ return M(o.th.net/12); }],
+    ["Cash-on-cash (before your pay)", function(o){ return P(o.roi); }], ["Cash-on-cash with manager", function(o){ return P(o.roiM); }], ["Payback (before your pay)", function(o){ return cell(o.payback, FMT.yrs); }],
+    ["Break-even revenue", function(o){ return M(o.be); }], ["Break-even incl. your draw", function(o){ return M(o.beOwner); }], ["Revenue cushion to break-even", function(o){ return P(o.cushion); }],
+    ["Price / SDE", function(o){ return X(o.sdeMult); }], ["Price / EBITDA", function(o){ return X(o.ebitdaMult); }], ["Price / revenue", function(o){ return X(o.revMult); }]
+  ];
+  var scn = [["Metric", "Conservative", "Base", "Aggressive"]];
+  rowsSpec.forEach(function(r){ scn.push([r[0]].concat(SCN.map(function(k){ return r[1](R.sc[k]); }))); });
+  scn.push([]); scn.push(["Scenario assumptions", "Conservative", "Base", "Aggressive"]);
+  SC_FIELDS.forEach(function(f){ scn.push([f[1] + " (" + f[2] + ")"].concat(SCN.map(function(k){ return s.sc[k][f[0]]; }))); });
+
+  // Deal structure
+  var ds = [["Uses", "Amount"], ["Purchase price", M(v.price)], ["Working capital", M(v.wc)], ["Closing costs", M(R.closing)], ["Guarantee + lender fees", M(R.fee)], ["Post-close reserve", M(R.reserve)],
+    [], ["Sources", "Amount"], ["Bank / SBA loan", M(R.bank)], ["Seller note", M(R.seller)], ["Other note", M(R.other)], ["Your cash at close", M(R.cash)],
+    [], ["Note", "Principal", "Rate", "Term (yrs)", "Monthly", "Annual"]];
+  R.notes.forEach(function(n){ ds.push([n.k, M(n.P), cell(n.rate/100, "0.00%"), n.term, M(n.m), M(n.m*12)]); });
+
+  // Projection
+  var pj = [];
+  SCN.forEach(function(k){
+    var ys = R.sc[k].years;
+    pj.push([SCN_LABEL[k] + " — year"].concat(ys.map(function(y){ return y.t; })));
+    pj.push(["Revenue"].concat(ys.map(function(y){ return M(y.rev); })));
+    pj.push(["SDE"].concat(ys.map(function(y){ return M(y.sde); })));
+    pj.push(["Debt service"].concat(ys.map(function(y){ return M(y.ds); })));
+    pj.push(["Cash flow after debt"].concat(ys.map(function(y){ return M(y.cf); })));
+    pj.push(["Cumulative"].concat(ys.map(function(y){ return M(y.cum); })));
+    pj.push(["DSCR"].concat(ys.map(function(y){ return X(y.dscr); })));
+    pj.push([]);
+  });
+
+  // Taxes
+  var tx = [["Take-home after tax (year 1)", "Conservative", "Base", "Aggressive"]];
+  [["Cash after debt, before tax", "cfad"], ["Year-1 loan interest (deducted)", "interest"], ["Purchase-price write-off (deducted)", "amort"], ["Taxed business profit", "biz"],
+   ["QBI deduction", "qbiDed"], ["Federal income tax", "fed"], [v.entity === "scorp" ? "Payroll tax on S-corp salary" : "Self-employment tax", "fica"], ["Alabama income tax", "al"], ["Local occupational tax", "local"],
+   ["Total taxes", "total"], ["Take-home per year", "net"]].forEach(function(r){ tx.push([r[0]].concat(SCN.map(function(k){ return M(R.sc[k].th[r[1]]); }))); });
+  tx.push(["Take-home per month"].concat(SCN.map(function(k){ return M(R.sc[k].th.net/12); })));
+  tx.push([]); tx.push(["Assumptions: 2026 federal brackets (" + (v.filing === "mfj" ? "married filing jointly" : "single") + "), 20% QBI deduction, " + (v.entity === "scorp" ? "S-corp with " + money(v.scorpSalary) + " salary" : "LLC / sole prop self-employment tax") + ", Alabama 2/4/5% brackets with federal tax deduction" + (v.localPct ? ", " + v.localPct + "% local tax" : "") + (v.otherIncome ? ", on top of " + money(v.otherIncome) + " other household income" : "") + ". Estimate only; not tax advice."]);
+
+  // Inputs
+  var inp = [["Full underwriting inputs", "Value"]];
+  SECTIONS.forEach(function(sec){
+    inp.push([]); inp.push([plain(sec.t)]);
+    sec.f.forEach(function(f){
+      if(f[2] === "calc") return;
+      var val = v[f[0]], c;
+      if(f[2] === "chk") c = val ? "Yes" : "No";
+      else if(f[2] === "sel") c = (f[5].filter(function(o){ return o[0] === val; })[0] || [0, val])[1];
+      else if(f[2] === "$") c = M(val);
+      else if(f[2] === "%") c = cell(val, '0.##"%"');
+      else c = cell(val, '0.##" ' + f[2] + '"');
+      inp.push([plain(f[1]), c]);
+    });
+  });
+  inp.push([]); inp.push(["Quick screen"]);
+  inp.push(["Asking price", M(q.price)], ["Inventory or extras on top", M(q.extra)], ["Gross revenue", M(q.revenue)], ["EBITDA (listed)", M(q.ebitda)],
+    ["SDE source", q.sdeMethod], ["SDE used", M(q.sde)], ["Industry", (INDUSTRIES.filter(function(x){ return x[0] === q.ind; })[0] || [0, q.ind])[1]]);
+  inp.push([]); inp.push(["Warning thresholds", "Green", "Yellow"]);
+  THRESH.forEach(function(t){ inp.push([t[1] + " (" + (t[5] === "min" ? "at least" : "at most") + ", " + t[2] + ")", T[t[0]][0], T[t[0]][1]]); });
+  if(q.listing && q.listing.text){ inp.push([]); inp.push(["Pasted listing"]); q.listing.text.split("\n").forEach(function(line){ inp.push(["", line]); }); }
+
+  var wb = XL.utils.book_new();
+  XL.utils.book_append_sheet(wb, sheet(XL, sum, [44, 90]), "Summary");
+  XL.utils.book_append_sheet(wb, sheet(XL, scn, [38, 16, 16, 16]), "Scenarios");
+  XL.utils.book_append_sheet(wb, sheet(XL, ds, [26, 16, 10, 10, 14, 14]), "Deal structure");
+  XL.utils.book_append_sheet(wb, sheet(XL, pj, [24, 13, 13, 13, 13, 13, 13, 13, 13, 13, 13]), "10-yr projection");
+  XL.utils.book_append_sheet(wb, sheet(XL, tx, [38, 16, 16, 16]), "Take-home");
+  XL.utils.book_append_sheet(wb, sheet(XL, inp, [48, 20, 12]), "Inputs");
+  return {wb:wb, filename:(name.replace(/[\\/:*?"<>|]+/g, " ").trim() || "Deal") + " - underwriting " + today + ".xlsx"};
+}
+async function saveFile(filename, blob){
+  var dl = null;
+  if(window.claude && typeof window.claude.use === "function"){ try{ dl = await window.claude.use("downloads"); }catch(_){ dl = null; } }
+  if(dl){
+    try{ var r = await dl.save({filename:filename, data:blob}); toast(r && r.status === "delivered" ? "Sent" : "Exported"); }
+    catch(e){ var c = e && e.code;
+      toast(c === "declined" ? "Export cancelled" : c === "rate_limited" ? "A save prompt is already open" : "Downloads aren't available in this view"); }
+    return;
+  }
+  if(window.claude){ toast("Downloads aren't available in this view"); return; }
+  var a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 1500);
+  toast("Exported");
+}
+document.getElementById("btnExport").addEventListener("click", function(){
+  var btn = this; btn.disabled = true; btn.textContent = "Preparing…";
+  loadXLSX().then(function(XL){
+    render();
+    var out = buildWorkbook(XL);
+    var buf = XL.write(out.wb, {bookType:"xlsx", type:"array"});
+    return saveFile(out.filename, new Blob([buf], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));
+  }).catch(function(){ toast("Couldn't load the Excel library. Check your connection and try again"); })
+    .then(function(){ btn.disabled = false; btn.textContent = "Export to Excel"; });
 });
 })();
 </script>
