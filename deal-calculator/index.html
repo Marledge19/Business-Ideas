@@ -149,6 +149,17 @@ table.proj td.n{min-width:88px}
 .foot{font-size:11.5px;color:var(--faint);padding:8px 14px 12px;line-height:1.5;max-width:90ch}
 .legend{font:500 11px var(--sans);text-transform:none;letter-spacing:0;color:var(--faint)}
 .legend b{color:var(--input);font-family:var(--mono);font-weight:500}
+/* take-home */
+select.fsel{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--line-strong);border-radius:3px;background:var(--panel);color:var(--ink);width:100%;min-width:0}
+.thbig{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;padding:12px 14px}
+.thbig span{display:block;font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.thbig b{display:block;font:700 22px/1.2 var(--mono);font-variant-numeric:tabular-nums;margin-top:3px;color:var(--g)}
+.thbig div:last-child b{color:var(--ink)}
+.thbig small{display:block;font-size:11.5px;color:var(--muted)}
+.thbig b.neg,td.n.neg{color:var(--r)}
+@media (max-width:520px){.thbig{grid-template-columns:1fr 1fr}.thbig b{font-size:19px}}
+.thtab td i{display:block;font-style:normal;font-size:11px;color:var(--faint)}
+.thtab td{white-space:normal}
 /* view switch */
 .views{display:inline-flex;border:1px solid var(--line-strong);border-radius:5px;overflow:hidden}
 .views button{border:0;border-radius:0;padding:7px 14px;font-size:13px;background:var(--panel);color:var(--muted)}
@@ -278,7 +289,7 @@ table.proj td.n{min-width:88px}
       <div class="sec"><h2>Assumed financing</h2>
         <ul class="assume" id="qAssume"></ul>
         <div class="qactions">
-          <button type="button" id="btnEditTerms">Edit terms &amp; thresholds</button>
+          <button type="button" id="btnEditTerms">Edit terms, taxes &amp; thresholds</button>
           <button type="button" id="btnSend" class="primary">Open full underwriting</button>
         </div>
       </div>
@@ -286,6 +297,10 @@ table.proj td.n{min-width:88px}
     <div class="results">
       <div class="verdict" id="qVerdict" aria-live="polite"></div>
       <div class="tiles" id="qTiles"></div>
+      <section class="panel" id="qThPanel">
+        <h3>Your take-home <span class="spacer"></span><span class="legend">Year 1 at asking price, after Alabama &amp; federal tax</span></h3>
+        <div id="thQuick"></div>
+      </section>
       <section class="panel">
         <h3>Why</h3>
         <ul class="why" id="qWhy"></ul>
@@ -319,7 +334,18 @@ table.proj td.n{min-width:88px}
       </div>
 
       <section class="panel">
-        <h3>Scenarios <span class="spacer"></span><span class="legend">Year 1, pre-tax. <b>Blue</b> = your inputs.</span></h3>
+        <h3>Your take-home <span class="spacer"></span>
+          <span class="tabs" id="thTabs" role="group" aria-label="Take-home scenario">
+            <button type="button" data-s="cons" aria-pressed="false">Conservative</button>
+            <button type="button" data-s="base" aria-pressed="true">Base</button>
+            <button type="button" data-s="aggr" aria-pressed="false">Aggressive</button>
+          </span>
+        </h3>
+        <div id="thFull"></div>
+      </section>
+
+      <section class="panel">
+        <h3>Scenarios <span class="spacer"></span><span class="legend">Year 1. <b>Blue</b> = your inputs.</span></h3>
         <div class="tw"><table class="sc" id="scTable"></table></div>
         <p class="foot">SDE moves with operating leverage: fixed overhead and the fixed part of payroll stay put while revenue changes, so a revenue drop cuts SDE by more than the same percentage. Cash flow after debt is what's left for you before your own pay and taxes. Break-even revenue covers fixed costs, capex reserve and all debt service.</p>
       </section>
@@ -383,6 +409,14 @@ var SECTIONS = [
   {t:"Your situation", f:[
     ["ownerDraw","Minimum draw you need","$",100000,"Personal living need, pre-tax"],
     ["mgr","Manager salary, loaded","$",95000,"If you hire someone to run it"]
+  ]},
+  {t:"Your taxes (Alabama)", f:[
+    ["filing","Filing status","sel","single","",[["single","Single"],["mfj","Married filing jointly"]]],
+    ["entity","Business taxed as","sel","llc","",[["llc","LLC / sole prop"],["scorp","S-corp"]]],
+    ["scorpSalary","S-corp salary","$",60000,"Used only if taxed as an S-corp"],
+    ["otherIncome","Other household income","$",0,"Spouse's wages, etc."],
+    ["localPct","Local occupational tax","%",0,"Some cities charge ~1% (Birmingham)"],
+    ["amort","Write off purchase price","chk",true]
   ]}
 ];
 var SC_FIELDS = [
@@ -478,6 +512,8 @@ function buildInputs(){
       var id=f[0], lab=f[1], unit=f[2], hint=f[4] ? '<i>'+f[4]+'</i>' : "";
       if(unit==="calc"){
         h += '<div class="row"><label>'+lab+'<i>'+(id==="_bank" ? 'Price &minus; down &minus; seller &minus; other (+ financed items)' : 'Down + closing + working capital + reserve (+ unrolled fees)')+'</i></label><div class="calc" id="'+id+'"></div></div>';
+      } else if(unit==="sel"){
+        h += '<div class="row"><label for="'+id+'">'+lab+'</label><div class="cell"><select class="fsel" id="'+id+'">'+f[5].map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===d.v[id]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></div></div>';
       } else if(unit==="chk"){
         h += '<div class="row"><label for="'+id+'">'+lab+'</label><div class="chk"><input type="checkbox" id="'+id+'"'+(d.v[id]?" checked":"")+'></div></div>';
       } else {
@@ -513,7 +549,7 @@ function readState(){
   SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){
     if(f[2]==="calc") return;
     var el = document.getElementById(f[0]);
-    s.v[f[0]] = f[2]==="chk" ? el.checked : parse(el.value);
+    s.v[f[0]] = f[2]==="chk" ? el.checked : f[2]==="sel" ? el.value : parse(el.value);
   }); });
   SCN.forEach(function(k){ s.sc[k] = {}; SC_FIELDS.forEach(function(f){ s.sc[k][f[0]] = parse(document.getElementById("sc_"+k+"_"+f[0]).value); }); });
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
@@ -537,7 +573,7 @@ function writeState(s){
     if(f[2]==="calc") return;
     var el = document.getElementById(f[0]);
     var val = (s.v && s.v[f[0]] != null) ? s.v[f[0]] : d.v[f[0]];
-    if(f[2]==="chk") el.checked = !!val; else el.value = fmtInput(f[2], val);
+    if(f[2]==="chk") el.checked = !!val; else if(f[2]==="sel") el.value = val; else el.value = fmtInput(f[2], val);
   }); });
   SCN.forEach(function(k){ SC_FIELDS.forEach(function(f){
     var val = s.sc && s.sc[k] && s.sc[k][f[0]] != null ? s.sc[k][f[0]] : d.sc[k][f[0]];
@@ -575,6 +611,84 @@ function rag(key, val, T){
   if(isNaN(val)) return "";
   if(dir==="min") return val >= th[0] ? "g" : val >= th[1] ? "y" : "r";
   return val <= th[0] ? "g" : val <= th[1] ? "y" : "r";
+}
+
+/* ---------- owner take-home after tax (Alabama) ---------- */
+// 2026 federal brackets and standard deductions; Alabama 2/4/5% brackets with the
+// state's deduction for federal income tax. General estimates, not tax advice.
+var TAX = {
+  fed: {
+    single: {std:16100, br:[[12400,.10],[50400,.12],[105700,.22],[201775,.24],[256225,.32],[640600,.35],[Infinity,.37]]},
+    mfj:    {std:32200, br:[[24800,.10],[100800,.12],[211400,.22],[403550,.24],[512450,.32],[768700,.35],[Infinity,.37]]}
+  },
+  al: {
+    single: {ded:2500 + 1500, br:[[500,.02],[3000,.04],[Infinity,.05]]},
+    mfj:    {ded:5000 + 3000, br:[[1000,.02],[6000,.04],[Infinity,.05]]}
+  },
+  ssBase: 184500,
+  addlMedicare: {single:200000, mfj:250000}
+};
+function bracketTax(x, br){
+  var t = 0, lo = 0;
+  for(var i = 0; i < br.length; i++){ var hi = br[i][0]; if(x > lo) t += (Math.min(x, hi) - lo)*br[i][1]; lo = hi; }
+  return t;
+}
+function householdTax(fs, agi, qbiDed){
+  var fed = bracketTax(Math.max(0, agi - TAX.fed[fs].std - (qbiDed || 0)), TAX.fed[fs].br);
+  var al = bracketTax(Math.max(0, agi - TAX.al[fs].ded - fed), TAX.al[fs].br);
+  return {fed:fed, al:al};
+}
+function yr1Interest(P, rate, years){
+  var m = pmt(P, rate, years), r = rate/1200, n = Math.min(12, Math.round(years*12)), bal = P, total = 0;
+  if(!m) return 0;
+  for(var i = 0; i < n; i++){ var it = bal*r; total += it; bal -= m - it; }
+  return total;
+}
+// p: {sde, capex, cfad, notes:[{P, rate, term}], price}
+function takeHome(v, p){
+  var fs = v.filing === "mfj" ? "mfj" : "single";
+  var interest = p.notes.reduce(function(a, n){ return a + yr1Interest(n.P, n.rate, n.term); }, 0);
+  var equip = Math.min(v.equip, p.price), amort = v.amort ? equip/7 + Math.max(0, p.price - equip)/15 : 0;
+  var biz = p.sde - p.capex - interest - amort, pos = Math.max(0, biz), fica, agiBiz, qbi, salary = 0;
+  if(v.entity === "scorp"){
+    salary = Math.min(v.scorpSalary, pos);
+    fica = salary*0.153;
+    var profit = biz - salary - salary*0.0765;
+    agiBiz = salary + profit; qbi = Math.max(0, profit);
+  } else {
+    var se = pos*0.9235, seCore = 0.124*Math.min(se, TAX.ssBase) + 0.029*se;
+    fica = seCore + 0.009*Math.max(0, se + v.otherIncome - TAX.addlMedicare[fs]);
+    agiBiz = biz - seCore/2; qbi = Math.max(0, agiBiz);
+  }
+  var agi = Math.max(0, v.otherIncome + agiBiz);
+  var qbiDed = 0.2*Math.max(0, Math.min(qbi, agi - TAX.fed[fs].std));
+  var withBiz = householdTax(fs, agi, qbiDed), without = householdTax(fs, v.otherIncome, 0);
+  var fed = Math.max(0, withBiz.fed - without.fed), al = Math.max(0, withBiz.al - without.al);
+  var local = v.localPct/100*(v.entity === "scorp" ? salary : pos);
+  var total = fed + al + fica + local;
+  return {interest:interest, amort:amort, biz:biz, salary:salary, qbiDed:qbiDed, fed:fed, al:al, fica:fica, local:local,
+    total:total, cfad:p.cfad, net:p.cfad - total, rate: p.cfad > 0 ? total/p.cfad*100 : NaN};
+}
+function takeHomeHTML(th, v){
+  var fsl = v.filing === "mfj" ? "married filing jointly" : "single";
+  var neg = th.net < 0 ? " neg" : "";
+  var rows = [
+    ["Cash after debt, before tax", th.cfad, ""],
+    ["Federal income tax", -th.fed, th.qbiDed > 0 ? "after a "+money(th.qbiDed)+" QBI deduction" : ""],
+    [v.entity === "scorp" ? "Payroll tax on your salary" : "Self-employment tax", -th.fica, v.entity === "scorp" ? "15.3% of a "+money(th.salary)+" S-corp salary" : "15.3% Social Security + Medicare"],
+    ["Alabama income tax", -th.al, "2–5%, after deducting federal tax"]
+  ];
+  if(th.local > 0) rows.push(["Local occupational tax", -th.local, v.localPct+"%"]);
+  return '<div class="thbig">'+
+      '<div><span>Take-home per year</span><b class="'+neg+'">'+money(th.net)+'</b></div>'+
+      '<div><span>Per month</span><b class="'+neg+'">'+money(th.net/12)+'</b></div>'+
+      '<div><span>Taxes</span><b>'+money(th.total)+'</b><small>'+(isFinite(th.rate) ? pct(th.rate,0)+" of pre-tax cash" : "")+'</small></div>'+
+    '</div>'+
+    '<div class="tw"><table class="thtab">'+rows.map(function(r){
+      return '<tr><td>'+r[0]+(r[2] ? '<i>'+r[2]+'</i>' : '')+'</td><td class="n">'+money(r[1])+'</td><td class="n">'+money(r[1]/12)+'/mo</td></tr>';
+    }).join("")+'<tr class="total"><td>Take-home after tax</td><td class="n'+neg+'">'+money(th.net)+'</td><td class="n'+neg+'">'+money(th.net/12)+'/mo</td></tr></table></div>'+
+    '<p class="foot">Taxed profit is '+money(th.biz)+': SDE'+(th.capexUsed ? ' minus capex,' : '')+' minus '+money(th.interest)+' of year-1 loan interest'+(th.amort ? ' and '+money(th.amort)+' of purchase-price write-off (equipment over 7 years, goodwill over 15)' : '')+'. Loan principal isn\'t deductible, so you pay tax on more than the cash you keep. '+
+    '2026 federal brackets ('+fsl+'), '+(v.entity === "scorp" ? 'S-corp' : 'LLC / sole prop')+', Alabama brackets'+(v.otherIncome > 0 ? ', taxes shown are the extra on top of '+money(v.otherIncome)+' of other household income' : '')+'. Excludes health insurance, retirement contributions and credits. An estimate, not tax advice; confirm with a CPA.</p>';
 }
 
 function calc(s){
@@ -658,7 +772,7 @@ function calc(s){
 }
 
 /* ---------- render ---------- */
-var projScen = "base";
+var projScen = "base", thScen = "base";
 var last = null;
 
 function render(){
@@ -667,6 +781,10 @@ function render(){
   document.getElementById("_bank").textContent = money(R.bank);
   document.getElementById("_close").textContent = money(R.cash);
 
+  SCN.forEach(function(k){ var o = R.sc[k];
+    o.th = takeHome(v, {sde:o.sde, capex:v.capex, cfad:o.cfad, notes:o.notes, price:v.price}); o.th.capexUsed = v.capex > 0; });
+  document.getElementById("thFull").innerHTML = takeHomeHTML(R.sc[thScen].th, v);
+
   // tiles
   var b = R.sc.base, c = R.sc.cons;
   var tiles = [
@@ -674,6 +792,7 @@ function render(){
     {k:"DSCR, base", val:dscrF(b.dscr), sub:"Lender floor "+T.dscr[1]+"x", c:rag("dscr",b.dscr,T)},
     {k:"DSCR, conservative", val:dscrF(c.dscr), sub:"Revenue "+pct(s.sc.cons.revChg,0)+", rate +"+s.sc.cons.rateChg+" pts", c:rag("dscr",c.dscr,T)},
     {k:"Cash after debt, base", val:money(b.cfad), sub:(b.overDraw>=0?money(b.overDraw)+" over":money(-b.overDraw)+" short of")+" your draw", c:rag("cfCush",b.cfCush,T)},
+    {k:"Take-home, base", val:money(b.th.net), sub:money(b.th.net/12)+" / month after tax", c:b.th.net < 0 ? "r" : ""},
     {k:"Price / SDE, trailing", val:mult(R.ttm.sdeMult), sub:mult(R.ttm.ebitdaMult)+" EBITDA", c:worst([rag("sdeMult",R.ttm.sdeMult,T), rag("ebitdaMult",R.ttm.ebitdaMult,T)])}
   ];
   document.getElementById("tiles").innerHTML = tiles.map(function(t){
@@ -761,6 +880,10 @@ function render(){
   row("Cash flow after debt", function(o){return o.cfad;}, money);
   row("Over / under your draw", function(o){return o.overDraw;}, money, function(o){ return rag("cfCush", o.cfCush, T); });
   row("Cash flow after hiring a manager", function(o){return o.cfm;}, money);
+  grp("After tax (Alabama)");
+  row("Estimated taxes <i>federal + AL + SE</i>", function(o){return o.th.total;}, money);
+  row("Take-home per year", function(o){return o.th.net;}, money, function(o){ return o.th.net < 0 ? "r" : ""; });
+  row("Take-home per month", function(o){return o.th.net/12;}, money, function(o){ return o.th.net < 0 ? "r" : ""; });
   grp("Returns");
   row("Cash-on-cash <i>before your pay</i>", function(o){return o.roi;}, pct);
   row("Cash-on-cash with manager", function(o){return o.roiM;}, pct, "roiM");
@@ -804,11 +927,11 @@ function renderProj(){
 /* ---------- quick screen ---------- */
 var ZERO_SC = {revChg:0, cmChg:0, growth:0, rateChg:0};
 function screenCalc(s, price){
-  // Listing numbers only: no capex, working capital, closing costs or reserve.
+  // Listing numbers plus the full model's terms, costs at close and capex reserve.
   var v = Object.assign({}, s.v, {price:price + (s.q.extra||0), revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
-    overhead:0, payroll:0, capex:0});
+    overhead:0, payroll:0});
   var R = calc({v:v, sc:{cons:ZERO_SC, base:ZERO_SC, aggr:ZERO_SC}, t:s.t});
-  return {R:R, o:R.sc.base};
+  return {R:R, o:R.sc.base, v:v};
 }
 function greenPrice(s){
   var T = s.t, q = s.q, x = q.extra || 0;
@@ -883,7 +1006,9 @@ function renderScreen(s){
     '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+sellerPct+'%</b>'+(lf && lf.sellerPct === v.sellerPct ? ' (from listing)' : '')+' at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
     '<li>Bank / SBA at <b>'+v.bankRate+'%</b> / <b>'+v.bankTerm+' yrs</b>, fees <b>'+v.feePct+'%</b>'+(v.feeFin?' rolled in':' paid in cash')+'</li>'+
     (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
-    '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>';
+    '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>'+
+    '<li>Taxes: Alabama, <b>'+(v.filing === "mfj" ? "married" : "single")+'</b>, <b>'+(v.entity === "scorp" ? "S-corp" : "LLC")+'</b></li>';
+  document.getElementById("qThPanel").hidden = true;
   last.screen = null;
   document.getElementById("qb_total").textContent = money(q.build.total);
   var estE = effSDE(Object.assign({}, q, {sdeMode:"est"}));
@@ -902,7 +1027,7 @@ function renderScreen(s){
       need = "The listing doesn't give a price. Enter one under From the listing for a verdict. Below is what the "+(q.sdeEst ? "estimated " : "")+"cash flow can support.";
       if(q.sdeEst) pre.push(estCheck(q));
       var gp0 = greenPrice(s);
-      gEl.innerHTML = q.sde < v.ownerDraw
+      gEl.innerHTML = q.sde - v.capex < v.ownerDraw
         ? "Even with no debt at all, "+(q.sdeEst ? "estimated " : "")+"SDE of <b>"+money(q.sde)+"</b> is below the <b>"+money(v.ownerDraw)+"</b> you need to live on. Unless the real numbers are much better, this business can't support you at any price."
         : !gp0 ? "No price gets every check green with this cash flow and your terms."
         : "Highest price where every check is green: about <b>"+money(gp0)+"</b>"+(extra > 0 ? ", plus the "+money(extra)+" of extras" : "")+".";
@@ -912,9 +1037,12 @@ function renderScreen(s){
     return;
   }
   var X = screenCalc(s, q.price), o = X.o, R = X.R;
+  var th = takeHome(v, {sde:q.sde, capex:v.capex, cfad:o.cfad, notes:o.notes, price:X.v.price}); th.capexUsed = v.capex > 0;
+  document.getElementById("thQuick").innerHTML = takeHomeHTML(th, v);
+  document.getElementById("qThPanel").hidden = false;
   var sdeMult = total/q.sde, ebMult = q.ebitda > 0 ? total/q.ebitda : NaN;
   var margin = q.sde/q.revenue*100;
-  var drop = o.ds > 0 ? (1 - T.dscr[1]*o.ds/q.sde)*100 : 100;
+  var drop = o.ds > 0 ? (1 - (T.dscr[1]*o.ds + v.capex)/q.sde)*100 : 100;
   var checks = [], dataErr = false;
 
   if(q.sde >= q.revenue) dataErr = true;
@@ -941,7 +1069,7 @@ function renderScreen(s){
   }
   var dscrC = rag("dscr", o.dscr, T);
   checks.push({c:dscrC, t:"Can it carry the debt?", m:dscrF(o.dscr)+" DSCR",
-    d: "Debt service is "+money(o.ds)+"/yr ("+money(o.mo)+"/mo) at asking price. "+
+    d: "Debt service is "+money(o.ds)+"/yr ("+money(o.mo)+"/mo) at asking price"+(v.capex > 0 ? ", covered from SDE less a "+money(v.capex)+" capex reserve" : "")+". "+
       (dscrC==="g" ? "Cash flow covers it comfortably." : dscrC==="y" ? "Enough to get a loan, but little room for a bad year." : "Below the "+T.dscr[1]+"x most SBA lenders require, so this likely won't be financed at this price.")});
   var payC = rag("cfCush", o.cfCush, T);
   checks.push({c:payC, t:"Does it pay you?", m:money(o.cfad),
@@ -962,7 +1090,7 @@ function renderScreen(s){
   var verdict, why;
   if(dataErr){
     vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Check the numbers</span><p>Cash flow can\'t be equal to or above revenue. Fix the listing figures and the verdict will appear.</p>';
-    tEl.innerHTML = ""; gEl.innerHTML = "";
+    tEl.innerHTML = ""; gEl.innerHTML = ""; document.getElementById("qThPanel").hidden = true;
     wEl.innerHTML = '<li><span class="pill r">Red</span><span class="t">Numbers don\'t add up<small>Cash flow is '+money(q.sde)+' on revenue of '+money(q.revenue)+'. Usually a missing or extra zero.</small></span><span class="m"></span></li>';
     return;
   }
@@ -996,10 +1124,10 @@ function renderScreen(s){
 
   renderChecks(wEl, checks);
 
-  var minSde = Math.max(T.dscr[0]*o.ds, o.ds + v.ownerDraw*(1 + T.cfCush[0]/100), total/T.sdeMult[0]);
+  var minSde = Math.max(T.dscr[0]*o.ds + v.capex, o.ds + v.capex + v.ownerDraw*(1 + T.cfCush[0]/100), total/T.sdeMult[0]);
   var minLine = (q.sdeEst ? "Ask the broker: at the asking price" : "At the asking price") + ", SDE needs to be at least <b>"+money(minSde)+"</b> ("+pct(minSde/q.revenue*100)+" of revenue) for every check to be green.";
   var gp = greenPrice(s);
-  gEl.innerHTML = minLine + "<br>" + (q.sde < v.ownerDraw ? "Even with no debt at all, "+(q.sdeEst ? "estimated " : "")+"SDE of <b>"+money(q.sde)+"</b> is below the <b>"+money(v.ownerDraw)+"</b> you need to live on, so no price makes this work unless the real numbers are better."
+  gEl.innerHTML = minLine + "<br>" + (q.sde - v.capex < v.ownerDraw ? "Even with no debt at all, "+(q.sdeEst ? "estimated " : "")+"SDE of <b>"+money(q.sde)+"</b> is below the <b>"+money(v.ownerDraw)+"</b> you need to live on, so no price makes this work unless the real numbers are better."
     : !gp ? "No price gets every check to green with this cash flow and these terms."
     : gp >= q.price ? "Asking price is within the green range. Every check stays green up to about <b>"+money(gp)+"</b>."
     : "Offer to aim for: about <b>"+money(gp)+"</b> ("+pct((1-gp/q.price)*100,0)+" below asking). That's the highest price where the multiple, DSCR and your take-home all turn green.");
@@ -1217,7 +1345,7 @@ function summaryText(){
   lines.push("Price " + money(v.price) + " | " + mult(R.ttm.sdeMult) + " SDE | " + mult(R.ttm.ebitdaMult) + " EBITDA | " + mult(R.ttm.revMult) + " revenue");
   lines.push("Cash at close " + money(R.cash) + " | Bank " + money(R.bank) + " @ " + v.bankRate + "%/" + v.bankTerm + "y | Seller " + money(R.seller) + " @ " + v.sellerRate + "%/" + v.sellerTerm + "y" + (R.other>0 ? " | Other " + money(R.other) : ""));
   SCN.forEach(function(k){ var o = R.sc[k];
-    lines.push(SCN_LABEL[k] + ": SDE " + money(o.sde) + ", DS " + money(o.ds) + ", DSCR " + dscrF(o.dscr) + ", CF after debt " + money(o.cfad) + ", w/ manager " + money(o.cfm) + ", CoC " + pct(o.roi) + ", payback " + yrs(o.payback) + ", break-even " + money(o.be));
+    lines.push(SCN_LABEL[k] + ": SDE " + money(o.sde) + ", DS " + money(o.ds) + ", DSCR " + dscrF(o.dscr) + ", CF after debt " + money(o.cfad) + ", w/ manager " + money(o.cfm) + ", CoC " + pct(o.roi) + ", payback " + yrs(o.payback) + ", break-even " + money(o.be) + ", take-home after AL/fed tax " + money(o.th.net) + "/yr (" + money(o.th.net/12) + "/mo)");
   });
   var fl = Array.prototype.map.call(document.querySelectorAll("#flags li"), function(li){ return "- " + li.textContent.replace(/^(Red|Watch|OK)/, "$1: "); });
   return lines.concat(["Warnings:"], fl).join("\n");
@@ -1327,6 +1455,12 @@ document.getElementById("btnEditTerms").addEventListener("click", function(){
 document.getElementById("btnSend").addEventListener("click", function(){ setView("full"); window.scrollTo(0, 0); });
 document.getElementById("dealName").addEventListener("input", function(){ if(last){ last.s.name = this.value; lsSet(LS_CUR, readState()); } });
 
+document.getElementById("thTabs").addEventListener("click", function(e){
+  var btn = e.target.closest("button"); if(!btn) return;
+  thScen = btn.dataset.s;
+  Array.prototype.forEach.call(this.querySelectorAll("button"), function(b){ b.setAttribute("aria-pressed", b===btn ? "true" : "false"); });
+  render();
+});
 document.getElementById("projTabs").addEventListener("click", function(e){
   var btn = e.target.closest("button"); if(!btn) return;
   projScen = btn.dataset.s;
