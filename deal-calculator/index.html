@@ -152,6 +152,17 @@ table.proj td.n{min-width:88px}
 .views button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
 
 /* quick screen */
+.srcbar{display:flex;flex-direction:column;gap:6px;padding:8px 12px 4px}
+.srcbar .lbl{font-size:13px}
+.srcbar .tabs{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}
+.srcbar .tabs button{padding:6px 4px;font-size:12px}
+.srcpanel .row + .row{border-top:1px dashed var(--line)}
+.srcpanel select{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(--line-strong);border-radius:3px;background:var(--panel);color:var(--ink);width:100%;min-width:0}
+.sdetotal{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin:4px 12px 8px;padding:8px 10px;border-top:1.5px solid var(--line-strong);background:var(--panel-2);border-radius:0 0 4px 4px}
+.sdetotal span{font-size:12.5px;color:var(--muted)}
+.sdetotal b{font:700 16px var(--mono);font-variant-numeric:tabular-nums}
+.srcnote{font-size:11.5px;color:var(--faint);padding:0 12px 8px;line-height:1.45}
+.row.minus label{color:var(--muted)}
 .qgrid{display:grid;grid-template-columns:minmax(300px,370px) minmax(0,1fr);gap:20px;align-items:start}
 @media (max-width:960px){.qgrid{grid-template-columns:minmax(0,1fr)}}
 .qin .row{padding-block:6px}
@@ -202,9 +213,39 @@ table.proj td.n{min-width:88px}
     <aside class="inputs qin" aria-label="Quick screen inputs">
       <div class="sec"><h2>From the listing</h2>
         <div class="row"><label for="q_price">Asking price</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_price" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="850,000"></div></div>
-        <div class="row"><label for="q_sde">Annual cash flow (SDE)<i>Seller's discretionary earnings</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_sde" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="280,000"></div></div>
         <div class="row"><label for="q_revenue">Gross revenue</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_revenue" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="1,300,000"></div></div>
         <div class="row"><label for="q_ebitda">EBITDA<i>Optional; leave 0 if not listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_ebitda" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="200,000"></div></div>
+      </div>
+      <div class="sec"><h2>Cash flow (SDE)</h2>
+        <div class="srcbar"><span class="lbl">Where is SDE coming from?</span>
+          <span class="tabs" id="sdeTabs" role="group" aria-label="SDE source">
+            <button type="button" data-m="listed" aria-pressed="true">Listed</button>
+            <button type="button" data-m="build" aria-pressed="false">Build from P&amp;L</button>
+            <button type="button" data-m="est" aria-pressed="false">Not disclosed</button>
+          </span>
+        </div>
+        <div class="srcpanel" id="src_listed">
+          <div class="row"><label for="q_sde">Annual cash flow (SDE)<i>As shown on the listing</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_sde" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="280,000"></div></div>
+        </div>
+        <div class="srcpanel" id="src_build" hidden>
+          <div class="row"><label for="qb_net">Net profit, pre-tax<i>From the P&amp;L or tax return</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_net" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="150,000"></div></div>
+          <div class="row"><label for="qb_salary">+ Owner salary / wages</label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_salary" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="80,000"></div></div>
+          <div class="row"><label for="qb_benefits">+ Owner payroll taxes &amp; benefits<i>Health insurance, retirement, perks</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_benefits" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="18,000"></div></div>
+          <div class="row"><label for="qb_interest">+ Interest expense<i>Seller's debt goes away at sale</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_interest" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="12,000"></div></div>
+          <div class="row"><label for="qb_da">+ Depreciation &amp; amortization</label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_da" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="20,000"></div></div>
+          <div class="row"><label for="qb_onetime">+ One-time expenses<i>Lawsuit, move, rare major repair</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_onetime" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="0"></div></div>
+          <div class="row"><label for="qb_personal">+ Personal expenses in the business<i>Car, phone, travel, family on payroll</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_personal" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="8,000"></div></div>
+          <div class="row minus"><label for="qb_less">&minus; One-time income<i>PPP/ERC, gain on asset sale</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qb_less" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="0"></div></div>
+          <div class="sdetotal"><span>Recast SDE</span><b id="qb_total"></b></div>
+          <p class="srcnote">Starting from EBITDA instead? Enter it as net profit and leave interest and D&amp;A at 0. Keep add-backs you can't document out.</p>
+        </div>
+        <div class="srcpanel" id="src_est" hidden>
+          <div class="row"><label for="qe_ind">Industry<i>Sets a typical SDE margin</i></label><div class="cell"><select class="q" id="qe_ind"></select></div></div>
+          <div class="row"><label for="qe_margin">SDE margin<i>% of revenue</i></label><div class="cell nopre"><input class="v q" id="qe_margin" type="text" inputmode="decimal" autocomplete="off" data-unit="%" value="15"><span class="u post">%</span></div></div>
+          <div class="row"><label for="qe_owner">Owner comp to add to EBITDA<i>Used only when EBITDA is listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qe_owner" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="75,000"></div></div>
+          <div class="sdetotal"><span id="qe_method">Estimated SDE</span><b id="qe_total"></b></div>
+          <p class="srcnote">An estimate can't earn a Great Deal verdict. The best it gets is Research Deeper until the seller shows you real numbers. Margins by industry are rough starting points; replace them with what you know.</p>
+        </div>
       </div>
       <div class="sec"><h2>Assumed financing</h2>
         <ul class="assume" id="qAssume"></ul>
@@ -334,6 +375,32 @@ var THRESH = [
   ["sdeDrop","SDE drop before DSCR hits floor (quick screen)","%",30,15,"min"]
 ];
 var Q_DEFAULT = {price:850000, sde:280000, revenue:1300000, ebitda:200000};
+var QB = [["net",1,150000],["salary",1,80000],["benefits",1,18000],["interest",1,12000],["da",1,20000],["onetime",1,0],["personal",1,8000],["less",-1,0]];
+// Rough SDE margins for owner-operated businesses; starting points only.
+var INDUSTRIES = [
+  ["custom","Custom (type a margin)",null],
+  ["home","Home services (HVAC, plumbing, electrical)",18],
+  ["clean","Landscaping, cleaning, janitorial",15],
+  ["prof","Professional services / agency",22],
+  ["health","Healthcare practice (dental, vet, PT)",22],
+  ["auto","Auto repair",17],
+  ["trades","Construction / specialty trades",12],
+  ["mfg","Manufacturing",15],
+  ["ecom","E-commerce",15],
+  ["retail","Retail store",10],
+  ["food","Restaurant / food service",10],
+  ["dist","Distribution / wholesale",8],
+  ["other","Other / not sure",12]
+];
+var Q2_DEFAULT = {sdeMode:"listed", ind:"other", margin:12, ownerComp:75000};
+function effSDE(q){
+  if(q.sdeMode === "build") return {sde:q.build.total, method:"Recast from the P&L"};
+  if(q.sdeMode === "est"){
+    if(q.ebitda > 0) return {sde:q.ebitda + q.ownerComp, method:"EBITDA + owner comp", est:true, byEbitda:true};
+    return {sde:q.revenue*q.margin/100, method:q.margin+"% of revenue", est:true};
+  }
+  return {sde:q.sdeListed, method:"Listed"};
+}
 
 function defaults(){
   var s = {v:{}, sc:{}, t:{}};
@@ -414,6 +481,13 @@ function readState(){
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
   s.name = document.getElementById("dealName").value;
   s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
+  s.q.sdeListed = s.q.sde;
+  s.q.sdeMode = document.querySelector("#sdeTabs [aria-pressed=true]").dataset.m;
+  s.q.build = {total:0}; QB.forEach(function(b){ var val = parse(document.getElementById("qb_"+b[0]).value); s.q.build[b[0]] = val; s.q.build.total += b[1]*val; });
+  s.q.ind = document.getElementById("qe_ind").value;
+  s.q.margin = parse(document.getElementById("qe_margin").value);
+  s.q.ownerComp = parse(document.getElementById("qe_owner").value);
+  var E = effSDE(s.q); s.q.sde = E.sde; s.q.sdeMethod = E.method; s.q.sdeEst = !!E.est; s.q.byEbitda = !!E.byEbitda;
   return s;
 }
 function writeState(s){
@@ -434,7 +508,13 @@ function writeState(s){
     document.getElementById("th_"+t[0]+"_y").value = pair[1];
   });
   document.getElementById("dealName").value = s.name || "";
-  Object.keys(Q_DEFAULT).forEach(function(k){ var val = s.q && s.q[k] != null ? s.q[k] : Q_DEFAULT[k]; document.getElementById("q_"+k).value = fmtInput("$", val); });
+  var q = s.q || {};
+  Object.keys(Q_DEFAULT).forEach(function(k){ var val = k==="sde" ? (q.sdeListed != null ? q.sdeListed : q.sde) : q[k]; if(val == null) val = Q_DEFAULT[k]; document.getElementById("q_"+k).value = fmtInput("$", val); });
+  QB.forEach(function(b){ var val = q.build && q.build[b[0]] != null ? q.build[b[0]] : b[2]; document.getElementById("qb_"+b[0]).value = fmtInput("$", val); });
+  document.getElementById("qe_ind").value = q.ind || Q2_DEFAULT.ind;
+  document.getElementById("qe_margin").value = q.margin != null ? q.margin : Q2_DEFAULT.margin;
+  document.getElementById("qe_owner").value = fmtInput("$", q.ownerComp != null ? q.ownerComp : Q2_DEFAULT.ownerComp);
+  setSdeMode(q.sdeMode || Q2_DEFAULT.sdeMode);
 }
 
 /* ---------- math ---------- */
@@ -693,9 +773,15 @@ function renderScreen(s){
     (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
     '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>';
   last.screen = null;
+  document.getElementById("qb_total").textContent = money(q.build.total);
+  document.getElementById("qe_total").textContent = money(q.sdeMode==="est" ? q.sde : effSDE(Object.assign({}, q, {sdeMode:"est"})).sde);
+  document.getElementById("qe_method").textContent = "Estimated SDE (" + effSDE(Object.assign({}, q, {sdeMode:"est"})).method + ")";
 
   if(!(q.price > 0 && q.sde > 0 && q.revenue > 0)){
-    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Enter the listing</span><p>Asking price, cash flow and revenue are all needed for a verdict.</p>';
+    var need = q.sdeMode==="listed" ? "Asking price, cash flow and revenue are all needed for a verdict. No SDE on the listing? Switch to Build from P&L or Not disclosed."
+      : q.sdeMode==="build" ? "The recast SDE is zero or negative. Check the P&L figures, and enter asking price and revenue."
+      : "Enter asking price and revenue (and EBITDA if it's listed) to estimate cash flow.";
+    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Enter the listing</span><p>'+need+'</p>';
     tEl.innerHTML = ""; wEl.innerHTML = ""; gEl.innerHTML = ""; return;
   }
   var X = screenCalc(s, q.price), o = X.o, R = X.R;
@@ -708,6 +794,15 @@ function renderScreen(s){
   if(q.ebitda > q.sde) checks.push({c:"y", t:"EBITDA is above SDE", d:"SDE normally equals EBITDA plus the owner's pay, so this listing may be mislabeled. Ask the broker.", m:""});
 
   var c;
+  if(q.sdeEst) checks.push({c:"y", t:"Cash flow is estimated", m:money(q.sde),
+    d: q.byEbitda ? "SDE isn't disclosed, so it's EBITDA plus "+money(q.ownerComp)+" of assumed owner comp. Ask the broker for the seller's actual pay."
+      : "Neither SDE nor EBITDA is disclosed, so it's revenue × "+q.margin+"%. Every number below depends on that guess. Ask for the P&L before going further."});
+  if(q.sdeMode==="build"){
+    var soft = q.build.onetime + q.build.personal;
+    var softPct = q.sde > 0 ? soft/q.sde*100 : 0;
+    if(softPct > 25) checks.push({c:"r", t:"Add-backs carry the deal", m:pct(softPct,0)+" of SDE", d:"One-time and personal add-backs are "+money(soft)+". Lenders and QoE firms often reject a lot of these. Get receipts for each."});
+    else if(softPct > 10) checks.push({c:"y", t:"Meaningful discretionary add-backs", m:pct(softPct,0)+" of SDE", d:"One-time and personal add-backs are "+money(soft)+". Make sure each one is documented."});
+  }
   c = rag("sdeMult", sdeMult, T);
   checks.push({c:c, t:"Price vs. cash flow", m:mult(sdeMult)+" SDE",
     d: c==="g" ? "At or under "+T.sdeMult[0]+"x SDE, which is a fair-to-cheap price for a Main Street business."
@@ -730,7 +825,7 @@ function renderScreen(s){
   checks.push({c:c, t:"How much can go wrong?", m:(drop > 0 ? pct(drop,0) : "0%")+" drop",
     d: drop > 0 ? "Cash flow can fall "+pct(drop,0)+" before DSCR drops below the "+T.dscr[1]+"x lender floor." : "It is already below the lender floor, with no margin for error."});
   c = rag("margin", margin, T);
-  checks.push({c:c, t:"Is it a healthy business?", m:pct(margin)+" margin",
+  if(!(q.sdeEst && !q.byEbitda)) checks.push({c:c, t:"Is it a healthy business?", m:pct(margin)+" margin",
     d: c==="g" ? "Cash flow is a healthy share of revenue, which usually means pricing power or a lean cost structure."
      : c==="y" ? "Moderate margin. Normal in some industries (distribution, restaurants, construction), but a small revenue dip hurts."
      : "Thin margin: a small drop in sales or rise in costs can wipe out cash flow."});
@@ -754,16 +849,18 @@ function renderScreen(s){
     verdict = "g"; why = "Price, debt coverage and your take-home all clear the bar. Worth requesting financials to verify the cash flow is real.";
   } else {
     verdict = "y";
-    var weak = checks.filter(function(x){return x.c!=="g";}).map(function(x){return x.t.replace(/\?$/,"").toLowerCase();});
-    why = "Nothing rules it out, but it misses a green light on: "+weak.join("; ")+". Dig into these before spending money on diligence.";
+    var weak = checks.filter(function(x){return x.c!=="g" && x.t!=="Cash flow is estimated";}).map(function(x){return x.t.replace(/\?$/,"").toLowerCase();});
+    why = (q.sdeEst ? "SDE is an estimate ("+q.sdeMethod+"), so confirm it first. " : "") +
+      (weak.length ? "Nothing rules it out, but it misses a green light on: "+weak.join("; ")+". Dig into these before spending money on diligence." : "On the estimate, nothing else is a problem.");
   }
+  if(verdict==="g" && q.sdeEst){ verdict = "y"; why = "The numbers would clear the bar, but SDE is an estimate ("+q.sdeMethod+"). Get the real P&L; if it confirms about "+money(q.sde)+" of cash flow, this becomes a strong deal."; }
   var WORD = {g:"Great Deal", y:"Research Deeper", r:"Not Worthwhile"};
   vEl.className = "verdict "+verdict;
   vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">'+WORD[verdict]+'</span><p>'+why+'</p>';
   last.screen = {verdict:WORD[verdict], why:why};
 
   tEl.innerHTML = [
-    ["Multiple", mult(sdeMult), "of SDE", rag("sdeMult",sdeMult,T)],
+    ["Multiple", mult(sdeMult), q.sdeEst ? "of estimated SDE" : q.sdeMode==="build" ? "of recast SDE" : "of SDE", rag("sdeMult",sdeMult,T)],
     ["DSCR", dscrF(o.dscr), money(o.ds)+" / yr debt", dscrC],
     ["Cash after debt", money(o.cfad), "before your pay & taxes", payC],
     ["Down payment", money(R.cash), "plus closing costs & working capital", ""]
@@ -775,10 +872,12 @@ function renderScreen(s){
     return '<li><span class="pill '+x.c+'">'+(x.c==="r"?"Red":x.c==="y"?"Watch":"Good")+'</span><span class="t">'+x.t+'<small>'+x.d+'</small></span><span class="m '+x.c+'">'+x.m+'</span></li>';
   }).join("");
 
+  var minSde = Math.max(T.dscr[0]*o.ds, o.ds + v.ownerDraw*(1 + T.cfCush[0]/100), q.price/T.sdeMult[0]);
+  var minLine = (q.sdeEst ? "Ask the broker: at the asking price" : "At the asking price") + ", SDE needs to be at least <b>"+money(minSde)+"</b> ("+pct(minSde/q.revenue*100)+" of revenue) for every check to be green.";
   var gp = greenPrice(s);
-  gEl.innerHTML = !gp ? "No price gets every check to green with this cash flow and these terms."
+  gEl.innerHTML = minLine + "<br>" + (!gp ? "No price gets every check to green with this cash flow and these terms."
     : gp >= q.price ? "Asking price is within the green range. Every check stays green up to about <b>"+money(gp)+"</b>."
-    : "Offer to aim for: about <b>"+money(gp)+"</b> ("+pct((1-gp/q.price)*100,0)+" below asking). That's the highest price where the multiple, DSCR and your take-home all turn green.";
+    : "Offer to aim for: about <b>"+money(gp)+"</b> ("+pct((1-gp/q.price)*100,0)+" below asking). That's the highest price where the multiple, DSCR and your take-home all turn green.");
 }
 
 function worst(arr){ return arr.indexOf("r")>=0 ? "r" : arr.indexOf("y")>=0 ? "y" : "g"; }
@@ -797,7 +896,7 @@ function toast(msg){ var t = document.getElementById("toast"); t.textContent = m
 function summaryText(){
   var s = last.s, R = last.R, v = s.v, lines = [];
   lines.push((s.name || "Deal") + " \u2014 underwriting summary");
-  if(last.screen) lines.push("Quick screen (listing " + money(s.q.price) + " / SDE " + money(s.q.sde) + "): " + last.screen.verdict + " \u2014 " + last.screen.why);
+  if(last.screen) lines.push("Quick screen (listing " + money(s.q.price) + " / SDE " + money(s.q.sde) + ", " + s.q.sdeMethod.toLowerCase() + "): " + last.screen.verdict + " \u2014 " + last.screen.why);
   lines.push("Price " + money(v.price) + " | " + mult(R.ttm.sdeMult) + " SDE | " + mult(R.ttm.ebitdaMult) + " EBITDA | " + mult(R.ttm.revMult) + " revenue");
   lines.push("Cash at close " + money(R.cash) + " | Bank " + money(R.bank) + " @ " + v.bankRate + "%/" + v.bankTerm + "y | Seller " + money(R.seller) + " @ " + v.sellerRate + "%/" + v.sellerTerm + "y" + (R.other>0 ? " | Other " + money(R.other) : ""));
   SCN.forEach(function(k){ var o = R.sc[k];
@@ -808,6 +907,13 @@ function summaryText(){
 }
 
 /* ---------- wire up ---------- */
+function setSdeMode(m){
+  Array.prototype.forEach.call(document.querySelectorAll("#sdeTabs button"), function(b){ b.setAttribute("aria-pressed", b.dataset.m===m ? "true" : "false"); });
+  ["listed","build","est"].forEach(function(k){ document.getElementById("src_"+k).hidden = k !== m; });
+}
+document.getElementById("qe_ind").innerHTML = INDUSTRIES.map(function(x){ return '<option value="'+x[0]+'">'+x[1]+(x[2]!=null ? " \u2014 "+x[2]+"%" : "")+'</option>'; }).join("");
+document.getElementById("qe_ind").value = Q2_DEFAULT.ind;
+document.getElementById("qe_margin").value = Q2_DEFAULT.margin;
 buildInputs();
 var saved = lsGet(LS_CUR);
 if(saved) writeState(saved);
@@ -817,6 +923,13 @@ render();
 inputsEl.addEventListener("input", render);
 var qEl = document.getElementById("viewScreen");
 qEl.addEventListener("input", function(e){ if(e.target.classList.contains("q")) render(); });
+document.getElementById("qe_ind").addEventListener("change", function(){
+  var ind = INDUSTRIES.filter(function(x){ return x[0]===this.value; }, this)[0];
+  if(ind && ind[2] != null) document.getElementById("qe_margin").value = ind[2];
+  render();
+});
+document.getElementById("qe_margin").addEventListener("input", function(){ document.getElementById("qe_ind").value = "custom"; });
+document.getElementById("sdeTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b){ setSdeMode(b.dataset.m); render(); } });
 [inputsEl, qEl].forEach(function(root){
 inputsEl.addEventListener("change", render);
   root.addEventListener("focusin", function(e){
