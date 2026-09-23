@@ -348,11 +348,13 @@ var SCN_LABEL = {cons:"Conservative", base:"Base", aggr:"Aggressive"};
 var SECTIONS = [
   {t:"Deal", f:[
     ["price","Purchase price","$",1450000],
-    ["wc","Working capital at close","$",100000,"Cash for AR, inventory, payroll float"],
+    ["wc","Working capital at close","$",0,"Only if the price excludes it"],
     ["wcFin","Finance working capital in bank loan","chk",false],
     ["equip","Equipment / FF&amp;E value","$",250000,"Appraised hard assets"],
-    ["closing","Closing costs","$",45000,"Legal, QoE, appraisal, filings"],
-    ["reserve","Post-close cash reserve","$",50000,"Your cushion, kept outside the loan"]
+    ["closingPct","Closing costs","%",3,"% of price: legal, QoE, appraisal"],
+    ["closingMin","Closing costs minimum","$",10000,"Small deals still pay for legal and QoE"],
+    ["reserveMo","Post-close cash reserve","mo",0,"Months of debt service kept in the bank"],
+    ["_close","Cash needed at close","calc"]
   ]},
   {t:"Capital stack", f:[
     ["downPct","Down payment","%",10,"Your equity, % of price"],
@@ -475,7 +477,7 @@ function buildInputs(){
     sec.f.forEach(function(f){
       var id=f[0], lab=f[1], unit=f[2], hint=f[4] ? '<i>'+f[4]+'</i>' : "";
       if(unit==="calc"){
-        h += '<div class="row"><label>'+lab+'<i>Price &minus; down &minus; seller &minus; other (+ financed items)</i></label><div class="calc" id="'+id+'"></div></div>';
+        h += '<div class="row"><label>'+lab+'<i>'+(id==="_bank" ? 'Price &minus; down &minus; seller &minus; other (+ financed items)' : 'Down + closing + working capital + reserve (+ unrolled fees)')+'</i></label><div class="calc" id="'+id+'"></div></div>';
       } else if(unit==="chk"){
         h += '<div class="row"><label for="'+id+'">'+lab+'</label><div class="chk"><input type="checkbox" id="'+id+'"'+(d.v[id]?" checked":"")+'></div></div>';
       } else {
@@ -530,6 +532,7 @@ function readState(){
 }
 function writeState(s){
   var d = defaults();
+  if(s.v && s.v.closing === 45000 && s.v.wc === 100000 && s.v.reserve === 50000) s = Object.assign({}, s, {v:Object.assign({}, s.v, {wc:0})});
   SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){
     if(f[2]==="calc") return;
     var el = document.getElementById(f[0]);
@@ -580,7 +583,10 @@ function calc(s){
   var bankBase = Math.max(0, v.price - down - seller - other + (v.wcFin ? v.wc : 0));
   var fee = bankBase*v.feePct/100;
   var bank = bankBase + (v.feeFin ? fee : 0);
-  var cash = down + (v.wcFin ? 0 : v.wc) + v.closing + (v.feeFin ? 0 : fee) + v.reserve;
+  var closing = v.price > 0 ? Math.max(v.price*v.closingPct/100, v.closingMin) : 0;
+  var baseMonthly = pmt(bank, v.bankRate, v.bankTerm) + pmt(seller, v.sellerRate, v.sellerTerm) + pmt(other, v.otherRate, v.otherTerm);
+  var reserve = v.reserveMo*baseMonthly;
+  var cash = down + (v.wcFin ? 0 : v.wc) + closing + (v.feeFin ? 0 : fee) + reserve;
   var gap = v.price - down - seller - other; // negative => over-funded
   var notes = [
     {k:"Bank / SBA", P:bank, rate:v.bankRate, term:v.bankTerm, variable:true},
@@ -647,7 +653,8 @@ function calc(s){
   return {down:down, seller:seller, other:other, bankBase:bankBase, fee:fee, bank:bank, cash:cash, gap:gap,
     notes:notes, F0:F0, cm0:cm0, ttm:ttm, sc:sc,
     equipCover: bank>0 ? v.equip/bank*100 : Infinity,
-    equityPct: (v.price + v.wc + v.closing + fee) > 0 ? cash/(v.price + v.wc + v.closing + fee + v.reserve)*100 : 0};
+    closing:closing, reserve:reserve,
+    equityPct: (v.price + v.wc + closing + fee + reserve) > 0 ? cash/(v.price + v.wc + closing + fee + reserve)*100 : 0};
 }
 
 /* ---------- render ---------- */
@@ -658,6 +665,7 @@ function render(){
   var s = readState(), R = calc(s), v = s.v, T = s.t;
   last = {s:s, R:R};
   document.getElementById("_bank").textContent = money(R.bank);
+  document.getElementById("_close").textContent = money(R.cash);
 
   // tiles
   var b = R.sc.base, c = R.sc.cons;
@@ -695,7 +703,7 @@ function render(){
   }).join("");
 
   // sources & uses
-  var uses = [["Purchase price", v.price], ["Working capital", v.wc], ["Closing costs", v.closing], ["Guarantee + lender fees", R.fee], ["Post-close reserve", v.reserve]];
+  var uses = [["Purchase price", v.price], ["Working capital", v.wc], ["Closing costs", R.closing], ["Guarantee + lender fees", R.fee], ["Post-close reserve", R.reserve]];
   var sources = [["Bank / SBA loan", R.bank], ["Seller note", R.seller], ["Other note", R.other], ["Your cash", R.cash]];
   var tu = uses.reduce(function(a,x){return a+x[1];},0), ts = sources.reduce(function(a,x){return a+x[1];},0);
   var su = '<tr><th>Uses</th><th class="n">Amount</th><th class="n">%</th></tr>';
@@ -798,7 +806,7 @@ var ZERO_SC = {revChg:0, cmChg:0, growth:0, rateChg:0};
 function screenCalc(s, price){
   // Listing numbers only: no capex, working capital, closing costs or reserve.
   var v = Object.assign({}, s.v, {price:price + (s.q.extra||0), revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
-    overhead:0, payroll:0, capex:0, wc:0, closing:0, reserve:0});
+    overhead:0, payroll:0, capex:0});
   var R = calc({v:v, sc:{cons:ZERO_SC, base:ZERO_SC, aggr:ZERO_SC}, t:s.t});
   return {R:R, o:R.sc.base};
 }
@@ -862,6 +870,10 @@ function renderChecks(el, checks){
   el.innerHTML = checks.map(function(x){
     return '<li'+(x.info ? ' class="info"' : '')+'><span class="pill '+x.c+'">'+PILL[x.c]+'</span><span class="t">'+x.t+'<small>'+x.d+'</small></span><span class="m '+x.c+'">'+x.m+'</span></li>';
   }).join("");
+}
+function cashParts(R, v){
+  var parts = [["down", R.down], ["closing", R.closing], ["working capital", v.wcFin ? 0 : v.wc], ["fees", v.feeFin ? 0 : R.fee], ["reserve", R.reserve]];
+  return parts.filter(function(x){ return x[1] > 0; }).map(function(x){ return money(x[1])+" "+x[0]; }).join(" + ");
 }
 function renderScreen(s){
   var q = s.q, T = s.t, v = s.v, lf = q.listing && q.listing.facts;
@@ -979,7 +991,7 @@ function renderScreen(s){
     ["Multiple", mult(sdeMult), (q.sdeEst ? "of estimated SDE" : q.sdeMode==="build" ? "of recast SDE" : "of SDE")+(extra > 0 ? ", incl. extras" : ""), rag("sdeMult",sdeMult,T)],
     ["DSCR", dscrF(o.dscr), money(o.ds)+" / yr debt", dscrC],
     ["Cash after debt", money(o.cfad), "before your pay & taxes", payC],
-    ["Down payment", money(R.cash), "plus closing costs & working capital", ""]
+    ["Cash to close", money(R.cash), cashParts(R, v), ""]
   ].map(function(t){ return '<div class="tile '+t[3]+'"><div class="k">'+t[0]+'</div><div class="val">'+t[1]+'</div><div class="sub">'+t[2]+'</div></div>'; }).join("");
 
   renderChecks(wEl, checks);
@@ -1082,6 +1094,9 @@ function parseListing(text){
   m = t.match(/(\d+)\s+(cars|vehicles|trucks|units|boats|trailers|machines)\s+(?:in|of)\s+(?:current\s+)?(?:inventory|stock)/i) || t.match(/inventory\s+of\s+(\d+)\s+(cars|vehicles|trucks|units|boats|trailers)/i);
   if(m){ f.invUnits = +m[1]; f.invUnitWord = m[2].toLowerCase(); }
 
+  var wcm = labeled(t, "working capital|net working capital");
+  if(wcm && wcm.val >= 1000){ f.wc = wcm.val; f.wcIncluded = /included|including/i.test(t.slice(wcm.end).split("\n")[0]); }
+  else if(/working capital[^.\n]{0,30}included|includ(?:es|ing)[^.\n]{0,15}working capital/i.test(t)) f.wcIncluded = true;
   var fe = labeled(t, "ff&e|furniture,? fixtures(?:,? (?:&|and) equipment)?|equipment value|equipment"); if(fe && fe.val >= 1000) f.ffe = fe.val;
 
   if(/real estate[^.\n]{0,30}not included/i.test(t)) f.realEstate = null;
@@ -1152,6 +1167,8 @@ function applyListing(f){
   if(f.sde > 0){ set("q_sde", f.sde); setSdeMode("listed"); } else setSdeMode("est");
   if(f.sellerPct > 0) document.getElementById("sellerPct").value = f.sellerPct;
   if(f.ffe > 0) set("equip", f.ffe);
+  if(f.wc > 0) set("wc", f.wcIncluded ? 0 : f.wc);
+  else if(f.wcIncluded) set("wc", 0);
 }
 function renderFound(){
   var el = document.getElementById("lfFound"), f = listing.facts;
@@ -1167,6 +1184,7 @@ function renderFound(){
   if(f.inventory) row(true, "Inventory", money(f.inventory), f.invIncluded === false ? "Added on top of the price" : f.invIncluded ? "Included in the price" : "Unclear whether it's included");
   else if(f.invUnits) row(true, "Inventory", f.invUnits+" "+f.invUnitWord, "No dollar value given");
   if(f.ffe) row(true, "FF&E / equipment", money(f.ffe));
+  if(f.wc || f.wcIncluded) row(true, "Working capital", f.wc ? money(f.wc) : "Included", f.wcIncluded ? "Included in the price" : "Added to cash needed at close");
   if(f.realEstate) row(true, "Real estate", f.realEstate === "included" ? "Included" : "Available");
   if(f.sellerFin) row(true, "Seller financing", f.sellerPct ? f.sellerPct+"%" : "Offered", f.sellerPct ? "Set as your seller note %" : "");
   if(f.years) row(true, "History", f.years+"+ years");
