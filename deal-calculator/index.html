@@ -1,0 +1,676 @@
+<title>Main Street Deal Calculator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=Archivo+Narrow:wght@500;600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --ground:#EEF1F0; --panel:#FFFFFF; --panel-2:#F6F8F7; --ink:#15201C; --muted:#5C6A64; --faint:#8A9690;
+  --line:#D6DDDA; --line-strong:#B9C3BF;
+  --input:#1F45B8; --input-bg:#F3F6FF; --focus:#3A63E0;
+  --g:#17703F; --g-bg:#E3F3E8; --y:#8F5B00; --y-bg:#FFF1D1; --r:#B3261E; --r-bg:#FCE6E3;
+  --base-col:#F2F5FD;
+  --sans:"Archivo",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --narrow:"Archivo Narrow","Archivo",system-ui,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --ground:#0F1412; --panel:#171D1B; --panel-2:#1C2320; --ink:#E3E9E6; --muted:#9AA8A2; --faint:#6E7B75;
+    --line:#29322F; --line-strong:#3A4541;
+    --input:#9DB5FF; --input-bg:#1A2233; --focus:#7C9BFF;
+    --g:#6CD49A; --g-bg:#16301F; --y:#F2C063; --y-bg:#342811; --r:#FF8A80; --r-bg:#3A1A18;
+    --base-col:#1B2230;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --ground:#0F1412; --panel:#171D1B; --panel-2:#1C2320; --ink:#E3E9E6; --muted:#9AA8A2; --faint:#6E7B75;
+  --line:#29322F; --line-strong:#3A4541;
+  --input:#9DB5FF; --input-bg:#1A2233; --focus:#7C9BFF;
+  --g:#6CD49A; --g-bg:#16301F; --y:#F2C063; --y-bg:#342811; --r:#FF8A80; --r-bg:#3A1A18;
+  --base-col:#1B2230;
+}
+*{box-sizing:border-box}
+body{background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);margin:0}
+.app{max-width:1480px;margin:0 auto;padding-inline:16px;padding-block:14px 56px}
+.num,input.v,td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+
+/* header */
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;padding-block:6px 14px;border-bottom:1px solid var(--line-strong);margin-bottom:16px}
+header.top h1{font:700 19px/1.1 var(--sans);letter-spacing:-.01em;margin:0;text-wrap:balance}
+header.top h1 small{display:block;font:500 11px/1.3 var(--narrow);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-top:3px}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-left:auto}
+.toolbar input,.toolbar select{font:inherit;font-size:13px;padding:6px 8px;border:1px solid var(--line-strong);border-radius:4px;background:var(--panel);color:var(--ink);min-width:0}
+.toolbar input{width:170px}
+.toolbar select{max-width:170px}
+button{font:600 12.5px var(--sans);padding:6px 10px;border:1px solid var(--line-strong);border-radius:4px;background:var(--panel);color:var(--ink);cursor:pointer}
+button:hover{border-color:var(--ink)}
+button.primary{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+button:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:2px solid var(--focus);outline-offset:1px}
+.toast{font-size:12px;color:var(--muted);min-width:60px}
+
+/* layout */
+.grid{display:grid;grid-template-columns:minmax(300px,370px) minmax(0,1fr);gap:20px;align-items:start}
+@media (min-width:961px){.inputs{position:sticky;top:calc(env(safe-area-inset-top,0px) + 10px);max-height:calc(100vh - 20px);overflow-y:auto;scrollbar-width:thin}}
+@media (max-width:960px){.grid{grid-template-columns:minmax(0,1fr)}}
+
+/* input panel */
+.inputs{background:var(--panel);border:1px solid var(--line);border-radius:6px}
+.sec{border-bottom:1px solid var(--line)}
+.sec:last-child{border-bottom:0}
+.sec h2,.sec summary{font:600 11px/1 var(--narrow);text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0;padding:11px 12px 7px;background:var(--panel-2);border-bottom:1px solid var(--line)}
+.sec summary{cursor:pointer;list-style:none;display:flex;justify-content:space-between}
+.sec summary::after{content:"+";font-family:var(--mono)}
+details[open] > summary::after{content:"\2212"}
+.secnote{font-size:11.5px;color:var(--faint);padding:6px 12px 0}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 132px;align-items:center;gap:8px;padding:3px 12px;min-height:32px}
+.row + .row{border-top:1px dashed var(--line)}
+.row label{font-size:13px;line-height:1.25}
+.row label i{display:block;font-style:normal;font-size:11px;color:var(--faint)}
+.cell{position:relative;display:flex;align-items:center}
+.cell .u{position:absolute;font:500 11px var(--mono);color:var(--faint);pointer-events:none}
+.cell .u.pre{left:7px}.cell .u.post{right:7px}
+input.v{width:100%;font-size:13px;color:var(--input);background:var(--input-bg);border:1px solid transparent;border-radius:3px;padding:5px 26px 5px 18px;text-align:right}
+input.v:hover{border-color:var(--line-strong)}
+input.v:focus{outline:none;border-color:var(--focus);background:var(--panel)}
+.cell.nopre input.v{padding-left:7px;padding-right:34px}
+.chk{display:flex;justify-content:flex-end}
+.chk input{width:16px;height:16px;accent-color:var(--input)}
+.calc{font-family:var(--mono);font-size:13px;text-align:right;padding-right:8px;color:var(--ink)}
+
+.scgrid{display:grid;grid-template-columns:minmax(0,1fr) repeat(3,70px);gap:4px 6px;padding:8px 12px 10px;align-items:center}
+.scgrid .h{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:right}
+.scgrid label{font-size:12.5px;line-height:1.2}
+.scgrid label i{display:block;font-style:normal;font-size:10.5px;color:var(--faint)}
+.scgrid input.v{padding:5px 6px;font-size:12.5px}
+.thgrid{grid-template-columns:minmax(0,1fr) repeat(2,70px)}
+
+/* results */
+.results{display:flex;flex-direction:column;gap:16px;min-width:0}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px}
+.tile{background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:10px 12px}
+.tile .k{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.tile .val{font:600 21px/1.2 var(--mono);font-variant-numeric:tabular-nums;margin-top:4px}
+.tile .sub{font-size:11.5px;color:var(--muted);margin-top:2px}
+.tile.g{border-color:var(--g);box-shadow:inset 3px 0 0 var(--g)}
+.tile.y{border-color:var(--y);box-shadow:inset 3px 0 0 var(--y)}
+.tile.r{border-color:var(--r);box-shadow:inset 3px 0 0 var(--r)}
+.tile.g .val{color:var(--g)}.tile.y .val{color:var(--y)}.tile.r .val{color:var(--r)}
+
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:6px;min-width:0}
+.panel > h3{font:600 11px/1 var(--narrow);text-transform:uppercase;letter-spacing:.09em;color:var(--muted);margin:0;padding:12px 14px 10px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.panel > h3 .spacer{flex:1}
+
+.flags{list-style:none;margin:0;padding:8px 10px;display:flex;flex-direction:column;gap:5px}
+.flags li{display:flex;gap:9px;align-items:baseline;font-size:13px;padding:5px 8px;border-radius:4px}
+.flags li.r{background:var(--r-bg)}.flags li.y{background:var(--y-bg)}.flags li.g{background:var(--g-bg)}
+.pill{display:inline-block;font:700 10px/1 var(--narrow);letter-spacing:.07em;text-transform:uppercase;padding:4px 6px 3px;border-radius:3px;white-space:nowrap}
+.pill.r{background:var(--r);color:var(--panel)}.pill.y{background:var(--y);color:var(--panel)}.pill.g{background:var(--g);color:var(--panel)}
+
+.twocol{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.35fr);gap:16px}
+@media (max-width:1180px){.twocol{grid-template-columns:minmax(0,1fr)}}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%}
+th,td{padding:5px 10px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap;font-size:13px}
+th{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+td.n,th.n{text-align:right}
+tr.total td{font-weight:600;border-top:1.5px solid var(--line-strong)}
+tr.grp td{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--faint);background:var(--panel-2);padding-top:8px}
+tr:last-child td{border-bottom:0}
+.su td:first-child{color:var(--muted)}
+.cashbig{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:10px 14px;border-top:1px solid var(--line-strong);background:var(--panel-2);border-radius:0 0 6px 6px}
+.cashbig span{font:600 11px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
+.cashbig b{font:700 20px var(--mono)}
+.minirow{display:flex;flex-wrap:wrap;gap:6px 18px;padding:9px 14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}
+.minirow b{font-family:var(--mono);color:var(--ink);font-weight:600}
+
+table.sc th.n{min-width:118px}
+table.sc td:first-child{color:var(--ink);min-width:190px}
+table.sc td:first-child i{font-style:normal;color:var(--faint);font-size:11.5px}
+table.sc .b{background:var(--base-col)}
+td.n.g{color:var(--g);background:var(--g-bg)!important;font-weight:600}
+td.n.y{color:var(--y);background:var(--y-bg)!important;font-weight:600}
+td.n.r{color:var(--r);background:var(--r-bg)!important;font-weight:600}
+table.sc th .pill{margin-left:6px;vertical-align:1px}
+
+.tabs{display:inline-flex;border:1px solid var(--line-strong);border-radius:4px;overflow:hidden}
+.tabs button{border:0;border-radius:0;padding:5px 10px;font-size:11.5px;background:var(--panel);color:var(--muted)}
+.tabs button + button{border-left:1px solid var(--line-strong)}
+.tabs button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+table.proj td.n{min-width:88px}
+.foot{font-size:11.5px;color:var(--faint);padding:8px 14px 12px;line-height:1.5;max-width:90ch}
+.legend{font:500 11px var(--sans);text-transform:none;letter-spacing:0;color:var(--faint)}
+.legend b{color:var(--input);font-family:var(--mono);font-weight:500}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app">
+  <header class="top">
+    <h1>Main Street Deal Calculator<small>Small-business acquisition underwriting</small></h1>
+    <div class="toolbar">
+      <input id="dealName" type="text" aria-label="Deal name" placeholder="Deal name">
+      <button id="btnSave" class="primary" type="button">Save deal</button>
+      <select id="savedSel" aria-label="Saved deals"><option value="">Saved deals&hellip;</option></select>
+      <button id="btnDelete" type="button">Delete</button>
+      <button id="btnCopy" type="button">Copy summary</button>
+      <button id="btnReset" type="button">Load example</button>
+      <span class="toast" id="toast" role="status" aria-live="polite"></span>
+    </div>
+  </header>
+
+  <div class="grid">
+    <aside class="inputs" id="inputs" aria-label="Deal inputs"></aside>
+
+    <main class="results">
+      <div class="tiles" id="tiles"></div>
+
+      <section class="panel">
+        <h3>Warnings</h3>
+        <ul class="flags" id="flags"></ul>
+      </section>
+
+      <div class="twocol">
+        <section class="panel">
+          <h3>Sources &amp; uses</h3>
+          <div class="tw"><table class="su" id="suTable"></table></div>
+          <div class="cashbig"><span>Cash needed at close</span><b class="num" id="cashClose"></b></div>
+        </section>
+        <section class="panel">
+          <h3>Payments by note <span class="spacer"></span><span class="legend">at base rates</span></h3>
+          <div class="tw"><table id="notesTable"></table></div>
+          <div class="minirow" id="notesMini"></div>
+        </section>
+      </div>
+
+      <section class="panel">
+        <h3>Scenarios <span class="spacer"></span><span class="legend">Year 1, pre-tax. <b>Blue</b> = your inputs.</span></h3>
+        <div class="tw"><table class="sc" id="scTable"></table></div>
+        <p class="foot">SDE moves with operating leverage: fixed overhead and the fixed part of payroll stay put while revenue changes, so a revenue drop cuts SDE by more than the same percentage. Cash flow after debt is what's left for you before your own pay and taxes. Break-even revenue covers fixed costs, capex reserve and all debt service.</p>
+      </section>
+
+      <section class="panel">
+        <h3>10-year projection <span class="spacer"></span>
+          <span class="tabs" id="projTabs" role="group" aria-label="Projection scenario">
+            <button type="button" data-s="cons" aria-pressed="false">Conservative</button>
+            <button type="button" data-s="base" aria-pressed="true">Base</button>
+            <button type="button" data-s="aggr" aria-pressed="false">Aggressive</button>
+          </span>
+        </h3>
+        <div class="tw"><table class="proj" id="projTable"></table></div>
+        <p class="foot">Debt service steps down as each note pays off. Payback counts cumulative cash flow after debt, before your pay, against cash needed at close.</p>
+      </section>
+    </main>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var SCN = ["cons","base","aggr"];
+var SCN_LABEL = {cons:"Conservative", base:"Base", aggr:"Aggressive"};
+
+var SECTIONS = [
+  {t:"Deal", f:[
+    ["price","Purchase price","$",1450000],
+    ["wc","Working capital at close","$",100000,"Cash for AR, inventory, payroll float"],
+    ["wcFin","Finance working capital in bank loan","chk",false],
+    ["equip","Equipment / FF&amp;E value","$",250000,"Appraised hard assets"],
+    ["closing","Closing costs","$",45000,"Legal, QoE, appraisal, filings"],
+    ["reserve","Post-close cash reserve","$",50000,"Your cushion, kept outside the loan"]
+  ]},
+  {t:"Capital stack", f:[
+    ["downPct","Down payment","%",10,"Your equity, % of price"],
+    ["sellerPct","Seller note","%",10,"% of price"],
+    ["otherAmt","Other note","$",0,"Investor, equipment loan, HELOC"],
+    ["_bank","Bank / SBA loan","calc"]
+  ]},
+  {t:"Bank / SBA loan", f:[
+    ["bankRate","Interest rate","%",10.5],
+    ["bankTerm","Term","yrs",10],
+    ["feePct","Guarantee + lender fees","%",3,"% of loan"],
+    ["feeFin","Roll fees into loan","chk",true]
+  ]},
+  {t:"Seller note", f:[["sellerRate","Interest rate","%",6],["sellerTerm","Term","yrs",7]]},
+  {t:"Other note", f:[["otherRate","Interest rate","%",8],["otherTerm","Term","yrs",5]]},
+  {t:"Operations (trailing 12 months)", f:[
+    ["revenue","Revenue","$",2400000],
+    ["sde","SDE","$",400000,"Seller's discretionary earnings"],
+    ["ebitda","EBITDA","$",310000,"SDE less owner comp"],
+    ["overhead","Fixed overhead","$",260000,"Rent, insurance, software, utilities"],
+    ["payroll","Payroll (excl. owner)","$",520000],
+    ["payVar","Share of payroll that flexes with sales","%",30],
+    ["capex","Capex reserve per year","$",20000],
+    ["fixedInfl","Fixed-cost inflation per year","%",3]
+  ]},
+  {t:"Your situation", f:[
+    ["ownerDraw","Minimum draw you need","$",100000,"Personal living need, pre-tax"],
+    ["mgr","Manager salary, loaded","$",95000,"If you hire someone to run it"]
+  ]}
+];
+var SC_FIELDS = [
+  ["revChg","Year-1 revenue change","%"],
+  ["cmChg","Contribution margin change","pts"],
+  ["growth","Revenue growth, year 2+","%/yr"],
+  ["rateChg","Bank rate change","pts"]
+];
+var SC_DEFAULT = {cons:{revChg:-8,cmChg:-1,growth:0,rateChg:1}, base:{revChg:0,cmChg:0,growth:3,rateChg:0}, aggr:{revChg:8,cmChg:1,growth:6,rateChg:0}};
+// [key, label, unit, green, yellow, direction]
+var THRESH = [
+  ["dscr","DSCR","x",1.5,1.25,"min"],
+  ["cfCush","Cash after debt above your draw","%",25,0,"min"],
+  ["sdeMult","Price / SDE","x",3.0,4.0,"max"],
+  ["ebitdaMult","Price / EBITDA","x",4.5,6.0,"max"],
+  ["roiM","Cash-on-cash w/ manager","%",20,10,"min"],
+  ["payback","Payback","yrs",4,6,"max"],
+  ["cushion","Revenue cushion to break-even","%",20,10,"min"]
+];
+
+function defaults(){
+  var s = {v:{}, sc:{}, t:{}};
+  SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){ if(f[2]!=="calc") s.v[f[0]] = f[3]; }); });
+  SCN.forEach(function(k){ s.sc[k] = Object.assign({}, SC_DEFAULT[k]); });
+  THRESH.forEach(function(t){ s.t[t[0]] = [t[3], t[4]]; });
+  return s;
+}
+
+/* ---------- storage (per-browser convenience only) ---------- */
+var LS_CUR = "msdc.current", LS_DEALS = "msdc.deals";
+function lsGet(k){ try{ var x = localStorage.getItem(k); return x ? JSON.parse(x) : null; }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+
+/* ---------- formatting ---------- */
+function money(n){ if(!isFinite(n)) return "—"; var r = Math.round(n); return (r<0?"−$":"$") + Math.abs(r).toLocaleString("en-US"); }
+function mult(n){ return isFinite(n) ? n.toFixed(2)+"x" : "n/m"; }
+function pct(n,d){ return isFinite(n) ? (n<0?"−":"") + Math.abs(n).toFixed(d==null?1:d)+"%" : "—"; }
+function yrs(n){ return isFinite(n) ? n.toFixed(1)+" yrs" : ">10 yrs"; }
+function dscrF(n){ return isFinite(n) ? n.toFixed(2)+"x" : "no debt"; }
+function parse(str){ var n = parseFloat(String(str).replace(/[^0-9.\-]/g,"")); return isFinite(n) ? n : 0; }
+function fmtInput(unit, n){ return unit==="$" ? Math.round(n).toLocaleString("en-US") : String(n); }
+
+/* ---------- build input panel ---------- */
+var inputsEl = document.getElementById("inputs");
+function cellHTML(id, unit, val){
+  var pre = unit==="$" ? '<span class="u pre">$</span>' : "";
+  var post = unit!=="$" ? '<span class="u post">'+unit+'</span>' : "";
+  return '<div class="cell'+(unit==="$"?"":" nopre")+'">'+pre+
+    '<input class="v" id="'+id+'" type="text" inputmode="decimal" autocomplete="off" data-unit="'+unit+'" value="'+fmtInput(unit,val)+'">'+post+'</div>';
+}
+function buildInputs(){
+  var d = defaults(), h = "";
+  SECTIONS.forEach(function(sec){
+    h += '<div class="sec"><h2>'+sec.t+'</h2>';
+    sec.f.forEach(function(f){
+      var id=f[0], lab=f[1], unit=f[2], hint=f[4] ? '<i>'+f[4]+'</i>' : "";
+      if(unit==="calc"){
+        h += '<div class="row"><label>'+lab+'<i>Price &minus; down &minus; seller &minus; other (+ financed items)</i></label><div class="calc" id="'+id+'"></div></div>';
+      } else if(unit==="chk"){
+        h += '<div class="row"><label for="'+id+'">'+lab+'</label><div class="chk"><input type="checkbox" id="'+id+'"'+(d.v[id]?" checked":"")+'></div></div>';
+      } else {
+        h += '<div class="row"><label for="'+id+'">'+lab+hint+'</label>'+cellHTML(id,unit,d.v[id])+'</div>';
+      }
+    });
+    h += '</div>';
+  });
+  h += '<div class="sec"><h2>Scenario assumptions</h2><div class="scgrid"><span></span>';
+  SCN.forEach(function(k){ h += '<span class="h">'+(k==="cons"?"Cons.":k==="aggr"?"Aggr.":"Base")+'</span>'; });
+  SC_FIELDS.forEach(function(f){
+    h += '<label>'+f[1]+'<i>'+f[2]+'</i></label>';
+    SCN.forEach(function(k){
+      var id = "sc_"+k+"_"+f[0];
+      h += '<input class="v" id="'+id+'" type="text" inputmode="decimal" autocomplete="off" aria-label="'+SCN_LABEL[k]+' '+f[1]+'" value="'+d.sc[k][f[0]]+'">';
+    });
+  });
+  h += '</div></div>';
+  h += '<details class="sec" id="thSec"><summary>Warning thresholds</summary><div class="secnote">Green at or better than the first value, yellow up to the second, red beyond it.</div><div class="scgrid thgrid"><span></span><span class="h">Green</span><span class="h">Yellow</span>';
+  THRESH.forEach(function(t){
+    h += '<label>'+t[1]+'<i>'+(t[5]==="min"?"at least":"at most")+', '+t[2]+'</i></label>';
+    ["g","y"].forEach(function(c,i){
+      var id = "th_"+t[0]+"_"+c;
+      h += '<input class="v" id="'+id+'" type="text" inputmode="decimal" autocomplete="off" aria-label="'+t[1]+' '+(c==="g"?"green":"yellow")+' threshold" value="'+d.t[t[0]][i]+'">';
+    });
+  });
+  h += '</div></details>';
+  inputsEl.innerHTML = h;
+}
+
+function readState(){
+  var s = {v:{}, sc:{}, t:{}};
+  SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){
+    if(f[2]==="calc") return;
+    var el = document.getElementById(f[0]);
+    s.v[f[0]] = f[2]==="chk" ? el.checked : parse(el.value);
+  }); });
+  SCN.forEach(function(k){ s.sc[k] = {}; SC_FIELDS.forEach(function(f){ s.sc[k][f[0]] = parse(document.getElementById("sc_"+k+"_"+f[0]).value); }); });
+  THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
+  s.name = document.getElementById("dealName").value;
+  return s;
+}
+function writeState(s){
+  var d = defaults();
+  SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){
+    if(f[2]==="calc") return;
+    var el = document.getElementById(f[0]);
+    var val = (s.v && s.v[f[0]] != null) ? s.v[f[0]] : d.v[f[0]];
+    if(f[2]==="chk") el.checked = !!val; else el.value = fmtInput(f[2], val);
+  }); });
+  SCN.forEach(function(k){ SC_FIELDS.forEach(function(f){
+    var val = s.sc && s.sc[k] && s.sc[k][f[0]] != null ? s.sc[k][f[0]] : d.sc[k][f[0]];
+    document.getElementById("sc_"+k+"_"+f[0]).value = val;
+  }); });
+  THRESH.forEach(function(t){
+    var pair = s.t && s.t[t[0]] ? s.t[t[0]] : d.t[t[0]];
+    document.getElementById("th_"+t[0]+"_g").value = pair[0];
+    document.getElementById("th_"+t[0]+"_y").value = pair[1];
+  });
+  document.getElementById("dealName").value = s.name || "";
+}
+
+/* ---------- math ---------- */
+function pmt(P, ratePct, years){
+  var n = Math.round(years*12);
+  if(P <= 0 || n <= 0) return 0;
+  var r = ratePct/1200;
+  return r === 0 ? P/n : P*r/(1-Math.pow(1+r,-n));
+}
+function rag(key, val, T){
+  var th = T[key], dir = THRESH.filter(function(t){return t[0]===key;})[0][5];
+  if(isNaN(val)) return "";
+  if(dir==="min") return val >= th[0] ? "g" : val >= th[1] ? "y" : "r";
+  return val <= th[0] ? "g" : val <= th[1] ? "y" : "r";
+}
+
+function calc(s){
+  var v = s.v;
+  var down = v.price*v.downPct/100, seller = v.price*v.sellerPct/100, other = v.otherAmt;
+  var bankBase = Math.max(0, v.price - down - seller - other + (v.wcFin ? v.wc : 0));
+  var fee = bankBase*v.feePct/100;
+  var bank = bankBase + (v.feeFin ? fee : 0);
+  var cash = down + (v.wcFin ? 0 : v.wc) + v.closing + (v.feeFin ? 0 : fee) + v.reserve;
+  var gap = v.price - down - seller - other; // negative => over-funded
+  var notes = [
+    {k:"Bank / SBA", P:bank, rate:v.bankRate, term:v.bankTerm, variable:true},
+    {k:"Seller note", P:seller, rate:v.sellerRate, term:v.sellerTerm},
+    {k:"Other note", P:other, rate:v.otherRate, term:v.otherTerm}
+  ];
+  notes.forEach(function(n){ n.m = pmt(n.P, n.rate, n.term); });
+
+  // cost structure: fixed = overhead + non-flexing payroll; everything else in (revenue - SDE) is variable
+  var F0 = v.overhead + v.payroll*(1 - v.payVar/100);
+  var cm0 = v.revenue > 0 ? (v.sde + F0)/v.revenue : 0;
+  var addback = v.sde - v.ebitda;
+
+  var ttm = {
+    sdeMult: v.sde > 0 ? v.price/v.sde : Infinity,
+    ebitdaMult: v.ebitda > 0 ? v.price/v.ebitda : Infinity,
+    revMult: v.revenue > 0 ? v.price/v.revenue : Infinity
+  };
+
+  var sc = {};
+  SCN.forEach(function(k){
+    var p = s.sc[k];
+    var rev = v.revenue*(1 + p.revChg/100);
+    var cm = cm0 + p.cmChg/100;
+    var sde = rev*cm - F0;
+    var ebitda = sde - addback;
+    var ns = notes.map(function(n){ var rate = n.rate + (n.variable ? p.rateChg : 0); return {k:n.k, P:n.P, rate:rate, term:n.term, m:pmt(n.P, rate, n.term)}; });
+    var mo = ns.reduce(function(a,n){return a+n.m;},0), ds = mo*12;
+    var cfb = sde - v.capex;
+    var cfad = cfb - ds, cfm = cfad - v.mgr;
+    var o = {
+      rev:rev, cm:cm, sde:sde, ebitda:ebitda, margin: rev>0 ? sde/rev*100 : NaN,
+      notes:ns, mo:mo, ds:ds, cfb:cfb, cfad:cfad, cfm:cfm,
+      dscr: ds>0 ? cfb/ds : Infinity,
+      dscrM: ds>0 ? (cfb - v.mgr)/ds : Infinity,
+      overDraw: cfad - v.ownerDraw,
+      cfCush: v.ownerDraw>0 ? (cfad - v.ownerDraw)/v.ownerDraw*100 : (cfad>=0 ? Infinity : -Infinity),
+      roi: cash>0 ? cfad/cash*100 : Infinity,
+      roiM: cash>0 ? cfm/cash*100 : Infinity,
+      be: cm>0 ? (F0 + ds + v.capex)/cm : Infinity,
+      beOwner: cm>0 ? (F0 + ds + v.capex + v.ownerDraw)/cm : Infinity,
+      sdeMult: sde>0 ? v.price/sde : Infinity,
+      ebitdaMult: ebitda>0 ? v.price/ebitda : Infinity,
+      revMult: rev>0 ? v.price/rev : Infinity
+    };
+    o.cushion = rev>0 && isFinite(o.be) ? (1 - o.be/rev)*100 : -Infinity;
+
+    // projection
+    var years = [], cum = 0, payback = cash <= 0 ? 0 : Infinity;
+    for(var t=1; t<=10; t++){
+      var r_t = rev*Math.pow(1 + p.growth/100, t-1);
+      var F_t = F0*Math.pow(1 + v.fixedInfl/100, t-1);
+      var sde_t = r_t*cm - F_t;
+      var ds_t = ns.reduce(function(a,n){ var months = Math.max(0, Math.min(12, n.term*12 - (t-1)*12)); return a + n.m*months; }, 0);
+      var cf_t = sde_t - v.capex - ds_t, prev = cum;
+      cum += cf_t;
+      if(!isFinite(payback) && cum >= cash && cf_t > 0) payback = (t-1) + (cash - prev)/cf_t;
+      years.push({t:t, rev:r_t, sde:sde_t, ds:ds_t, cf:cf_t, cum:cum, dscr: ds_t>0 ? (sde_t - v.capex)/ds_t : Infinity});
+    }
+    o.years = years; o.payback = payback;
+    sc[k] = o;
+  });
+
+  return {down:down, seller:seller, other:other, bankBase:bankBase, fee:fee, bank:bank, cash:cash, gap:gap,
+    notes:notes, F0:F0, cm0:cm0, ttm:ttm, sc:sc,
+    equipCover: bank>0 ? v.equip/bank*100 : Infinity,
+    equityPct: (v.price + v.wc + v.closing + fee) > 0 ? cash/(v.price + v.wc + v.closing + fee + v.reserve)*100 : 0};
+}
+
+/* ---------- render ---------- */
+var projScen = "base";
+var last = null;
+
+function render(){
+  var s = readState(), R = calc(s), v = s.v, T = s.t;
+  last = {s:s, R:R};
+  document.getElementById("_bank").textContent = money(R.bank);
+
+  // tiles
+  var b = R.sc.base, c = R.sc.cons;
+  var tiles = [
+    {k:"Cash needed at close", val:money(R.cash), sub:pct(R.equityPct,0)+" of total project", c:""},
+    {k:"DSCR, base", val:dscrF(b.dscr), sub:"Lender floor "+T.dscr[1]+"x", c:rag("dscr",b.dscr,T)},
+    {k:"DSCR, conservative", val:dscrF(c.dscr), sub:"Revenue "+pct(s.sc.cons.revChg,0)+", rate +"+s.sc.cons.rateChg+" pts", c:rag("dscr",c.dscr,T)},
+    {k:"Cash after debt, base", val:money(b.cfad), sub:(b.overDraw>=0?money(b.overDraw)+" over":money(-b.overDraw)+" short of")+" your draw", c:rag("cfCush",b.cfCush,T)},
+    {k:"Price / SDE, trailing", val:mult(R.ttm.sdeMult), sub:mult(R.ttm.ebitdaMult)+" EBITDA", c:worst([rag("sdeMult",R.ttm.sdeMult,T), rag("ebitdaMult",R.ttm.ebitdaMult,T)])}
+  ];
+  document.getElementById("tiles").innerHTML = tiles.map(function(t){
+    return '<div class="tile '+t.c+'"><div class="k">'+t.k+'</div><div class="val">'+t.val+'</div><div class="sub">'+t.sub+'</div></div>';
+  }).join("");
+
+  // flags
+  var flags = [];
+  function add(l, txt){ if(l==="r"||l==="y") flags.push({l:l, txt:txt}); }
+  add(rag("sdeMult",R.ttm.sdeMult,T), "Paying "+mult(R.ttm.sdeMult)+" trailing SDE (green ≤ "+T.sdeMult[0]+"x, red above "+T.sdeMult[1]+"x).");
+  add(rag("ebitdaMult",R.ttm.ebitdaMult,T), "Paying "+mult(R.ttm.ebitdaMult)+" trailing EBITDA (green ≤ "+T.ebitdaMult[0]+"x, red above "+T.ebitdaMult[1]+"x).");
+  SCN.forEach(function(k){
+    var o = R.sc[k], L = SCN_LABEL[k];
+    var l = rag("dscr",o.dscr,T);
+    add(l, L+" DSCR is "+dscrF(o.dscr)+(l==="r" ? ", below the "+T.dscr[1]+"x most lenders require." : ", under your "+T.dscr[0]+"x comfort level."));
+    l = rag("cfCush",o.cfCush,T);
+    add(l, L+" cash after debt is "+money(o.cfad)+(o.overDraw<0 ? ", "+money(-o.overDraw)+" short of the "+money(v.ownerDraw)+" you need to live on." : ", only "+money(o.overDraw)+" above your draw."));
+  });
+  var lc = rag("cushion", b.cushion, T);
+  add(lc, "Base revenue can fall only "+pct(b.cushion)+" before cash flow no longer covers debt service.");
+  if(R.gap < 0) flags.push({l:"r", txt:"Down payment, seller note and other note add up to more than the purchase price."});
+  if(v.sde < v.ebitda) flags.push({l:"y", txt:"EBITDA is above SDE; SDE should include owner comp on top of EBITDA."});
+  flags.sort(function(a,b){ return a.l===b.l ? 0 : a.l==="r" ? -1 : 1; });
+  if(!flags.length) flags.push({l:"g", txt:"No warnings. Coverage, cash flow and price clear every threshold in all three scenarios."});
+  document.getElementById("flags").innerHTML = flags.map(function(f){
+    return '<li class="'+f.l+'"><span class="pill '+f.l+'">'+(f.l==="r"?"Red":f.l==="y"?"Watch":"OK")+'</span><span>'+f.txt+'</span></li>';
+  }).join("");
+
+  // sources & uses
+  var uses = [["Purchase price", v.price], ["Working capital", v.wc], ["Closing costs", v.closing], ["Guarantee + lender fees", R.fee], ["Post-close reserve", v.reserve]];
+  var sources = [["Bank / SBA loan", R.bank], ["Seller note", R.seller], ["Other note", R.other], ["Your cash", R.cash]];
+  var tu = uses.reduce(function(a,x){return a+x[1];},0), ts = sources.reduce(function(a,x){return a+x[1];},0);
+  var su = '<tr><th>Uses</th><th class="n">Amount</th><th class="n">%</th></tr>';
+  uses.forEach(function(x){ su += '<tr><td>'+x[0]+'</td><td class="n">'+money(x[1])+'</td><td class="n">'+pct(tu? x[1]/tu*100 : 0)+'</td></tr>'; });
+  su += '<tr class="total"><td>Total uses</td><td class="n">'+money(tu)+'</td><td class="n"></td></tr>';
+  su += '<tr><th>Sources</th><th class="n"></th><th class="n"></th></tr>';
+  sources.forEach(function(x){ su += '<tr><td>'+x[0]+'</td><td class="n">'+money(x[1])+'</td><td class="n">'+pct(ts? x[1]/ts*100 : 0)+'</td></tr>'; });
+  su += '<tr class="total"><td>Total sources</td><td class="n">'+money(ts)+'</td><td class="n"></td></tr>';
+  document.getElementById("suTable").innerHTML = su;
+  document.getElementById("cashClose").textContent = money(R.cash);
+
+  // notes
+  var nt = '<tr><th>Note</th><th class="n">Principal</th><th class="n">Rate</th><th class="n">Term</th><th class="n">Monthly</th><th class="n">Annual</th></tr>';
+  var tm = 0, tp = 0;
+  R.notes.forEach(function(n){ tm += n.m; tp += n.P;
+    nt += '<tr><td>'+n.k+'</td><td class="n">'+money(n.P)+'</td><td class="n">'+pct(n.rate,2)+'</td><td class="n">'+n.term+' yrs</td><td class="n">'+money(n.m)+'</td><td class="n">'+money(n.m*12)+'</td></tr>';
+  });
+  nt += '<tr class="total"><td>Total debt service</td><td class="n">'+money(tp)+'</td><td class="n"></td><td class="n"></td><td class="n">'+money(tm)+'</td><td class="n">'+money(tm*12)+'</td></tr>';
+  document.getElementById("notesTable").innerHTML = nt;
+  document.getElementById("notesMini").innerHTML =
+    '<span>Debt / price <b>'+pct(v.price? tp/v.price*100 : 0,0)+'</b></span>'+
+    '<span>Equipment covers bank loan <b>'+pct(R.equipCover,0)+'</b></span>'+
+    '<span>Debt / trailing SDE <b>'+(v.sde>0 ? (tp/v.sde).toFixed(2)+'x' : 'n/m')+'</b></span>'+
+    '<span>Contribution margin <b>'+pct(R.cm0*100)+'</b></span>';
+
+  // scenario table
+  function verdict(o){ return worst([rag("dscr",o.dscr,T), rag("cfCush",o.cfCush,T), rag("sdeMult",o.sdeMult,T)]); }
+  var h = '<tr><th>Metric</th>';
+  SCN.forEach(function(k){ var vd = verdict(R.sc[k]);
+    h += '<th class="n'+(k==="base"?" b":"")+'">'+SCN_LABEL[k]+'<span class="pill '+vd+'">'+(vd==="r"?"Fail":vd==="y"?"Watch":"Pass")+'</span></th>'; });
+  h += '</tr>';
+  function grp(t){ h += '<tr class="grp"><td colspan="4">'+t+'</td></tr>'; }
+  function row(label, fn, fmt, key){
+    h += '<tr><td>'+label+'</td>';
+    SCN.forEach(function(k){ var o = R.sc[k], val = fn(o); var cl = !key ? "" : typeof key === "function" ? key(o) : rag(key,val,T);
+      h += '<td class="n'+(k==="base"?" b":"")+(cl?" "+cl:"")+'">'+fmt(val)+'</td>'; });
+    h += '</tr>';
+  }
+  grp("Earnings");
+  row("Revenue", function(o){return o.rev;}, money);
+  row("SDE", function(o){return o.sde;}, money);
+  row("EBITDA", function(o){return o.ebitda;}, money);
+  row("SDE margin", function(o){return o.margin;}, pct);
+  grp("Debt service");
+  row("Bank / SBA monthly", function(o){return o.notes[0].m;}, money);
+  row("Seller note monthly", function(o){return o.notes[1].m;}, money);
+  if(R.other > 0) row("Other note monthly", function(o){return o.notes[2].m;}, money);
+  row("Total monthly", function(o){return o.mo;}, money);
+  row("Annual debt service", function(o){return o.ds;}, money);
+  grp("Coverage");
+  row("DSCR <i>(SDE &minus; capex) &divide; debt service</i>", function(o){return o.dscr;}, dscrF, "dscr");
+  row("DSCR with manager", function(o){return o.dscrM;}, dscrF, "dscr");
+  grp("Cash flow");
+  row("Cash flow before debt <i>SDE &minus; capex</i>", function(o){return o.cfb;}, money);
+  row("Cash flow after debt", function(o){return o.cfad;}, money);
+  row("Over / under your draw", function(o){return o.overDraw;}, money, function(o){ return rag("cfCush", o.cfCush, T); });
+  row("Cash flow after hiring a manager", function(o){return o.cfm;}, money);
+  grp("Returns");
+  row("Cash-on-cash <i>before your pay</i>", function(o){return o.roi;}, pct);
+  row("Cash-on-cash with manager", function(o){return o.roiM;}, pct, "roiM");
+  row("Payback <i>before your pay</i>", function(o){return o.payback;}, yrs, "payback");
+  grp("Break-even");
+  row("Break-even revenue <i>covers debt, no draw</i>", function(o){return o.be;}, money);
+  row("Break-even incl. your draw", function(o){return o.beOwner;}, money);
+  row("Revenue cushion to break-even", function(o){return o.cushion;}, pct, "cushion");
+  grp("Valuation");
+  row("Price / SDE", function(o){return o.sdeMult;}, mult, "sdeMult");
+  row("Price / EBITDA", function(o){return o.ebitdaMult;}, mult, "ebitdaMult");
+  row("Price / revenue", function(o){return o.revMult;}, mult);
+  document.getElementById("scTable").innerHTML = h;
+
+  renderProj();
+  lsSet(LS_CUR, s);
+}
+
+function renderProj(){
+  if(!last) return;
+  var o = last.R.sc[projScen], T = last.s.t, cash = last.R.cash;
+  var h = '<tr><th>Year</th>' + o.years.map(function(y){return '<th class="n">'+y.t+'</th>';}).join("") + '</tr>';
+  function r(label, fn, fmt, key){
+    h += '<tr><td>'+label+'</td>' + o.years.map(function(y){ var val = fn(y), cl = key ? " "+key(val) : "";
+      return '<td class="n'+cl+'">'+fmt(val)+'</td>'; }).join("") + '</tr>';
+  }
+  r("Revenue", function(y){return y.rev;}, money);
+  r("SDE", function(y){return y.sde;}, money);
+  r("Debt service", function(y){return y.ds;}, money);
+  r("Cash flow after debt", function(y){return y.cf;}, money);
+  r("Cumulative", function(y){return y.cum;}, money, function(val){ return val >= cash ? "g" : ""; });
+  r("DSCR", function(y){return y.dscr;}, dscrF, function(val){ return rag("dscr", val, T); });
+  document.getElementById("projTable").innerHTML = h;
+}
+
+function worst(arr){ return arr.indexOf("r")>=0 ? "r" : arr.indexOf("y")>=0 ? "y" : "g"; }
+
+/* ---------- saved deals ---------- */
+function refreshSaved(sel){
+  var deals = lsGet(LS_DEALS) || {}, el = document.getElementById("savedSel");
+  var names = Object.keys(deals).sort();
+  el.innerHTML = '<option value="">Saved deals ('+names.length+')</option>' + names.map(function(n){
+    var e = n.replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");
+    return '<option value="'+e+'"'+(n===sel?" selected":"")+'>'+e+'</option>'; }).join("");
+}
+var toastTimer;
+function toast(msg){ var t = document.getElementById("toast"); t.textContent = msg; clearTimeout(toastTimer); toastTimer = setTimeout(function(){ t.textContent = ""; }, 2600); }
+
+function summaryText(){
+  var s = last.s, R = last.R, v = s.v, lines = [];
+  lines.push((s.name || "Deal") + " — underwriting summary");
+  lines.push("Price " + money(v.price) + " | " + mult(R.ttm.sdeMult) + " SDE | " + mult(R.ttm.ebitdaMult) + " EBITDA | " + mult(R.ttm.revMult) + " revenue");
+  lines.push("Cash at close " + money(R.cash) + " | Bank " + money(R.bank) + " @ " + v.bankRate + "%/" + v.bankTerm + "y | Seller " + money(R.seller) + " @ " + v.sellerRate + "%/" + v.sellerTerm + "y" + (R.other>0 ? " | Other " + money(R.other) : ""));
+  SCN.forEach(function(k){ var o = R.sc[k];
+    lines.push(SCN_LABEL[k] + ": SDE " + money(o.sde) + ", DS " + money(o.ds) + ", DSCR " + dscrF(o.dscr) + ", CF after debt " + money(o.cfad) + ", w/ manager " + money(o.cfm) + ", CoC " + pct(o.roi) + ", payback " + yrs(o.payback) + ", break-even " + money(o.be));
+  });
+  var fl = Array.prototype.map.call(document.querySelectorAll("#flags li"), function(li){ return "- " + li.textContent.replace(/^(Red|Watch|OK)/, "$1: "); });
+  return lines.concat(["Warnings:"], fl).join("\n");
+}
+
+/* ---------- wire up ---------- */
+buildInputs();
+var saved = lsGet(LS_CUR);
+if(saved) writeState(saved);
+refreshSaved();
+render();
+
+inputsEl.addEventListener("input", render);
+inputsEl.addEventListener("change", render);
+inputsEl.addEventListener("focusin", function(e){
+  var el = e.target; if(el.classList && el.classList.contains("v") && el.dataset.unit==="$"){ el.value = String(parse(el.value)); try{ el.select(); }catch(_){} }
+});
+inputsEl.addEventListener("focusout", function(e){
+  var el = e.target; if(el.classList && el.classList.contains("v")){ el.value = fmtInput(el.dataset.unit||"", parse(el.value)); }
+});
+document.getElementById("dealName").addEventListener("input", function(){ if(last){ last.s.name = this.value; lsSet(LS_CUR, readState()); } });
+
+document.getElementById("projTabs").addEventListener("click", function(e){
+  var btn = e.target.closest("button"); if(!btn) return;
+  projScen = btn.dataset.s;
+  Array.prototype.forEach.call(this.querySelectorAll("button"), function(b){ b.setAttribute("aria-pressed", b===btn ? "true" : "false"); });
+  renderProj();
+});
+document.getElementById("btnSave").addEventListener("click", function(){
+  var s = readState(), name = (s.name || "").trim();
+  if(!name){ document.getElementById("dealName").focus(); toast("Name the deal first"); return; }
+  var deals = lsGet(LS_DEALS) || {}; deals[name] = s;
+  toast(lsSet(LS_DEALS, deals) ? "Saved" : "This browser blocked saving");
+  refreshSaved(name);
+});
+document.getElementById("savedSel").addEventListener("change", function(){
+  var deals = lsGet(LS_DEALS) || {}, d = deals[this.value];
+  if(d){ writeState(d); render(); toast("Loaded"); }
+});
+var delArmed = false;
+document.getElementById("btnDelete").addEventListener("click", function(){
+  var sel = document.getElementById("savedSel"), name = sel.value;
+  if(!name){ toast("Pick a saved deal to delete"); return; }
+  if(!delArmed){ delArmed = true; this.textContent = "Confirm delete"; var b = this; setTimeout(function(){ delArmed = false; b.textContent = "Delete"; }, 3000); return; }
+  delArmed = false; this.textContent = "Delete";
+  var deals = lsGet(LS_DEALS) || {}; delete deals[name]; lsSet(LS_DEALS, deals); refreshSaved(); toast("Deleted");
+});
+document.getElementById("btnReset").addEventListener("click", function(){ writeState(defaults()); render(); toast("Example loaded"); });
+document.getElementById("btnCopy").addEventListener("click", function(){
+  var txt = summaryText();
+  var p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject();
+  p.then(function(){ toast("Summary copied"); }, function(){
+    var ta = document.createElement("textarea"); ta.value = txt; ta.style.position = "fixed"; ta.style.opacity = "0"; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand("copy"); toast("Summary copied"); }catch(_){ toast("Copy blocked by browser"); }
+    document.body.removeChild(ta);
+  });
+});
+})();
+</script>
