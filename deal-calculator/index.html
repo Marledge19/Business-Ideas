@@ -72,6 +72,7 @@ details[open] > summary::after{content:"\2212"}
 .row.lnk > label::before{content:"\21C4  ";color:var(--input);font-family:var(--mono);font-size:11px}
 .linknote{font-size:12px;line-height:1.45;color:var(--muted);padding:9px 12px;background:var(--input-bg);border-bottom:1px solid var(--line);border-radius:6px 6px 0 0}
 .linknote b{color:var(--input);font-weight:600}
+.linkbtn{font:inherit;font-size:11px;padding:0 4px;border:0;background:none;color:var(--input);text-decoration:underline;cursor:pointer}
 .linknote span{display:block;margin-top:3px;color:var(--y)}
 .row label{font-size:13px;line-height:1.25}
 .row label i{display:block;font-style:normal;font-size:11px;color:var(--faint)}
@@ -252,6 +253,7 @@ select.fsel{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(-
       <div class="sec"><h2>From the listing</h2>
         <div class="row"><label for="q_price">Asking price</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_price" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="850,000"></div></div>
         <div class="row"><label for="q_revenue">Gross revenue</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_revenue" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="1,300,000"></div></div>
+        <div class="row"><label for="qe_ind">Industry<i>Sets manager pay and typical SDE margin</i></label><div class="cell"><select class="q" id="qe_ind"></select></div></div>
         <div class="row"><label for="q_extra">Inventory or extras on top<i>Added to the price, e.g. inventory at cost</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_extra" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="0"></div></div>
         <div class="row"><label for="q_ebitda">EBITDA<i>Optional; leave 0 if not listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_ebitda" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="200,000"></div></div>
       </div>
@@ -279,8 +281,7 @@ select.fsel{font:inherit;font-size:12.5px;padding:5px 6px;border:1px solid var(-
           <p class="srcnote">Starting from EBITDA instead? Enter it as net profit and leave interest and D&amp;A at 0. Keep add-backs you can't document out.</p>
         </div>
         <div class="srcpanel" id="src_est" hidden>
-          <div class="row"><label for="qe_ind">Industry<i>Sets a typical SDE margin</i></label><div class="cell"><select class="q" id="qe_ind"></select></div></div>
-          <div class="row"><label for="qe_margin">SDE margin<i>% of revenue</i></label><div class="cell nopre"><input class="v q" id="qe_margin" type="text" inputmode="decimal" autocomplete="off" data-unit="%" value="15"><span class="u post">%</span></div></div>
+          <div class="row"><label for="qe_margin">SDE margin<i>% of revenue; the industry sets a typical one</i></label><div class="cell nopre"><input class="v q" id="qe_margin" type="text" inputmode="decimal" autocomplete="off" data-unit="%" value="15"><span class="u post">%</span></div></div>
           <div class="row"><label for="qe_owner">Owner comp to add to EBITDA<i>Used only when EBITDA is listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="qe_owner" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="75,000"></div></div>
           <div class="sdetotal"><span id="qe_method">Estimated SDE</span><b id="qe_total"></b></div>
           <p class="srcnote">An estimate can't earn a Great Deal verdict. The best it gets is Research Deeper until the seller shows you real numbers. Margins by industry are rough starting points; replace them with what you know.</p>
@@ -408,7 +409,8 @@ var SECTIONS = [
   ]},
   {t:"Your situation", f:[
     ["ownerDraw","Minimum draw you need","$",55000,"Personal living need per year, pre-tax"],
-    ["mgr","Manager salary, loaded","$",95000,"If you hire someone to run it"]
+    ["mgrArea","Manager pay area","sel","state","",[["state","Alabama statewide"],["bham","Birmingham metro"]]],
+    ["mgr","Manager salary, loaded","$",73200,"If you hire someone to run it"]
   ]},
   {t:"Your taxes (Alabama)", f:[
     ["filing","Filing status","sel","single","",[["single","Single"],["mfj","Married filing jointly"]]],
@@ -464,6 +466,24 @@ var INDUSTRIES = [
   ["other","Other / not sure",12]
 ];
 var Q2_DEFAULT = {sdeMode:"listed", ind:"other", margin:12, ownerComp:75000};
+// Approximate base pay for the person who'd run a business this size in Alabama, pitched below
+// statewide BLS medians for the matching occupation because those include large employers.
+// Estimates from general knowledge of BLS OEWS levels, not pulled live. Edit freely.
+var MGR_PAY = {
+  home:["Operations manager (trades)",65000], clean:["Crew / operations supervisor",45000], prof:["Office / operations manager",60000],
+  health:["Practice manager",70000], auto:["Service manager",62000], autodeal:["Lot / sales manager",55000], wash:["Site manager",35000],
+  personal:["Salon / studio manager",40000], child:["Center director",45000], trans:["Operations / dispatch manager",60000],
+  bar:["Bar manager",45000], conv:["Store manager",38000], trades:["Construction supervisor",65000], mfg:["Plant / production manager",75000],
+  ecom:["Operations manager",55000], retail:["Store manager",42000], food:["Restaurant general manager",52000],
+  dist:["Warehouse / operations manager",65000], other:["General manager, small business",60000]
+};
+var MGR_LOAD = 1.22;   // payroll taxes, workers' comp, unemployment and modest benefits
+var MGR_BHAM = 1.07;   // Birmingham metro pay runs above the state average
+function mgrEstimate(ind, area){
+  var m = MGR_PAY[ind]; if(!m) return null;
+  var base = m[1]*(area === "bham" ? MGR_BHAM : 1);
+  return {role:m[0], base:Math.round(base/500)*500, loaded:Math.round(base*MGR_LOAD/500)*500, area: area === "bham" ? "Birmingham metro" : "Alabama statewide"};
+}
 function effSDE(q){
   if(q.sdeMode === "build") return {sde:q.build.total, method:"Recast from the P&L"};
   if(q.sdeMode === "est"){
@@ -555,7 +575,7 @@ function readState(){
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
   s.name = document.getElementById("dealName").value;
   s.drawSet = true;
-  s.link = {costsActual:link.costsActual, ebitdaEst:link.ebitdaEst, rev:link.rev};
+  s.link = {costsActual:link.costsActual, ebitdaEst:link.ebitdaEst, rev:link.rev, mgrManual:link.mgrManual};
   s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
   s.q.sdeListed = s.q.sde;
   s.q.listing = {text:document.getElementById("lfText").value, facts:listing.facts};
@@ -587,7 +607,7 @@ function writeState(s){
     document.getElementById("th_"+t[0]+"_y").value = pair[1];
   });
   document.getElementById("dealName").value = s.name || "";
-  link = {costsActual:!!(s.link && s.link.costsActual), ebitdaEst:!!(s.link && s.link.ebitdaEst), rev:(s.link && s.link.rev) || 0};
+  link = {costsActual:!!(s.link && s.link.costsActual), ebitdaEst:!!(s.link && s.link.ebitdaEst), rev:(s.link && s.link.rev) || 0, mgrManual:!!(s.link && s.link.mgrManual)};
   var q = s.q || {};
   Object.keys(Q_DEFAULT).forEach(function(k){ var val = k==="sde" ? (q.sdeListed != null ? q.sdeListed : q.sde) : q[k]; if(val == null) val = Q_DEFAULT[k]; document.getElementById("q_"+k).value = fmtInput("$", val); });
   QB.forEach(function(b){ var val = q.build && q.build[b[0]] != null ? q.build[b[0]] : b[2]; document.getElementById("qb_"+b[0]).value = fmtInput("$", val); });
@@ -782,6 +802,7 @@ function render(){
   last = {s:s, R:R};
   document.getElementById("_bank").textContent = money(R.bank);
   document.getElementById("_close").textContent = money(R.cash);
+  renderMgrHint(s);
 
   SCN.forEach(function(k){ var o = R.sc[k];
     o.th = takeHome(v, {sde:o.sde, capex:v.capex, cfad:o.cfad, notes:o.notes, price:v.price}); o.th.capexUsed = v.capex > 0; });
@@ -1000,6 +1021,14 @@ function cashParts(R, v){
   var parts = [["down", R.down], ["closing", R.closing], ["working capital", v.wcFin ? 0 : v.wc], ["fees", v.feeFin ? 0 : R.fee], ["reserve", R.reserve]];
   return parts.filter(function(x){ return x[1] > 0; }).map(function(x){ return money(x[1])+" "+x[0]; }).join(" + ");
 }
+function renderMgrHint(s){
+  var lab = document.querySelector('label[for="mgr"]'); if(!lab) return;
+  var e = mgrEstimate(s.q.ind, s.v.mgrArea), h;
+  if(!e) h = "Pick an industry on the Quick screen for an estimate";
+  else if(link.mgrManual && Math.round(s.v.mgr) !== e.loaded) h = 'Your number. Estimate for '+e.role.toLowerCase()+': '+money(e.loaded)+' <button type="button" class="linkbtn" id="mgrReset">Use it</button>';
+  else h = e.role+", "+e.area+": ~"+money(e.base)+" base + "+Math.round((MGR_LOAD-1)*100)+"% taxes & benefits (approx.)";
+  lab.innerHTML = 'Manager salary, loaded<i>'+h+'</i>';
+}
 function renderScreen(s){
   var q = s.q, T = s.t, v = s.v, lf = q.listing && q.listing.facts;
   var sellerPct = v.sellerPct;
@@ -1009,6 +1038,7 @@ function renderScreen(s){
     '<li>Bank / SBA at <b>'+v.bankRate+'%</b> / <b>'+v.bankTerm+' yrs</b>, fees <b>'+v.feePct+'%</b>'+(v.feeFin?' rolled in':' paid in cash')+'</li>'+
     (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
     '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>'+
+    '<li>Manager if you hire one <b>'+money(v.mgr)+'</b>'+(mgrEstimate(q.ind, v.mgrArea) && !link.mgrManual ? ' ('+mgrEstimate(q.ind, v.mgrArea).role.toLowerCase()+', est.)' : '')+'</li>'+
     '<li>Taxes: Alabama, <b>'+(v.filing === "mfj" ? "married" : "single")+'</b>, <b>'+(v.entity === "scorp" ? "S-corp" : "LLC")+'</b></li>';
   document.getElementById("qThPanel").hidden = true;
   last.screen = null;
@@ -1363,7 +1393,7 @@ document.getElementById("qe_ind").value = Q2_DEFAULT.ind;
 document.getElementById("qe_margin").value = Q2_DEFAULT.margin;
 buildInputs();
 var saved = lsGet(LS_CUR);
-var link = {costsActual:false, ebitdaEst:false, rev:0};
+var link = {costsActual:false, ebitdaEst:false, rev:0, mgrManual:false};
 if(saved) writeState(saved);
 refreshSaved();
 syncQuickToFull();
@@ -1375,7 +1405,12 @@ function setMoneyInput(id, val){
   var el = document.getElementById(id), nv = fmtInput("$", Math.round(val || 0));
   if(el.value !== nv && document.activeElement !== el) el.value = nv;
 }
+function applyMgrEstimate(){
+  var e = mgrEstimate(document.getElementById("qe_ind").value, document.getElementById("mgrArea").value);
+  if(e && !link.mgrManual) setMoneyInput("mgr", e.loaded);
+}
 function syncQuickToFull(){
+  applyMgrEstimate();
   var s = readState(), q = s.q, v = s.v, oldRev = link.rev || v.revenue, newRev = q.revenue;
   setMoneyInput("price", q.price + (q.extra || 0));
   setMoneyInput("revenue", newRev);
@@ -1409,6 +1444,7 @@ inputsEl.addEventListener("input", function(e){
   var id = e.target.id;
   if(LINKED[id]){ writeBackToQuick(id); syncQuickToFull(); }
   if(COST_IDS[id]) link.costsActual = true;
+  if(id === "mgr") link.mgrManual = true;
   render();
 });
 var qEl = document.getElementById("viewScreen");
@@ -1418,7 +1454,6 @@ document.getElementById("qe_ind").addEventListener("change", function(){
   if(ind && ind[2] != null) document.getElementById("qe_margin").value = ind[2];
   syncQuickToFull(); render();
 });
-document.getElementById("qe_margin").addEventListener("input", function(){ document.getElementById("qe_ind").value = "custom"; });
 function readListing(){
   var txt = document.getElementById("lfText").value;
   if(!txt.trim()){ toast("Paste a listing first"); return; }
@@ -1434,7 +1469,10 @@ document.getElementById("lfClear").addEventListener("click", function(){
 });
 document.getElementById("sdeTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b){ setSdeMode(b.dataset.m); syncQuickToFull(); render(); } });
 [inputsEl, qEl].forEach(function(root){
-inputsEl.addEventListener("change", render);
+inputsEl.addEventListener("change", function(e){ if(e.target.id === "mgrArea") applyMgrEstimate(); render(); });
+inputsEl.addEventListener("click", function(e){
+  if(e.target.id === "mgrReset"){ e.preventDefault(); link.mgrManual = false; applyMgrEstimate(); render(); }
+});
   root.addEventListener("focusin", function(e){
   var el = e.target; if(el.classList && el.classList.contains("v") && el.dataset.unit==="$"){ el.value = String(parse(el.value)); try{ el.select(); }catch(_){} }
 });
