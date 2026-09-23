@@ -152,6 +152,21 @@ table.proj td.n{min-width:88px}
 .views button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
 
 /* quick screen */
+.lf{padding:10px 12px 2px}
+.lfhelp{display:block;font-size:12px;color:var(--muted);margin-bottom:8px;line-height:1.4}
+.lf textarea{width:100%;min-height:130px;resize:vertical;font:12.5px/1.45 var(--sans);padding:8px 9px;border:1px solid var(--line-strong);border-radius:4px;background:var(--panel);color:var(--ink)}
+.lf textarea:focus{outline:none;border-color:var(--focus)}
+.lf .qactions{padding:8px 0 4px}
+.lfhead{font:600 10.5px var(--narrow);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:6px 0 4px}
+.found{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column}
+.found li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 8px;padding:5px 0;border-top:1px dashed var(--line);font-size:12.5px}
+.found .k{color:var(--muted)}
+.found .fv{font-family:var(--mono);font-size:12px;text-align:right;color:var(--ink)}
+.found li.miss .fv{color:var(--y)}
+.found small{grid-column:1 / -1;color:var(--faint);font-size:11px}
+.pill.n{background:var(--faint);color:var(--panel)}
+.why .m.n{color:var(--muted)}
+.why li.info .t{color:var(--muted)}
 .srcbar{display:flex;flex-direction:column;gap:6px;padding:8px 12px 4px}
 .srcbar .lbl{font-size:13px}
 .srcbar .tabs{width:100%;display:grid;grid-template-columns:repeat(3,1fr)}
@@ -211,9 +226,18 @@ table.proj td.n{min-width:88px}
 
   <div class="qgrid" id="viewScreen">
     <aside class="inputs qin" aria-label="Quick screen inputs">
+      <details class="sec" id="lfSec"><summary>Paste a listing (optional)</summary>
+        <div class="lf">
+          <label for="lfText" class="lfhelp">Copy the listing page (Ctrl+A, Ctrl+C) or just its description and paste it here. The numbers fill in below, and details like rent, inventory, partial-year sales and industry feed the screen.</label>
+          <textarea id="lfText" rows="7" spellcheck="false" placeholder="Asking Price: $450,000&#10;Cash Flow: $160,000&#10;Gross Revenue: $900,000&#10;&#10;Established 2009. Rent $3,500/month..."></textarea>
+          <div class="qactions"><button type="button" id="lfRead" class="primary">Read listing</button><button type="button" id="lfClear">Clear</button></div>
+          <div id="lfFound"></div>
+        </div>
+      </details>
       <div class="sec"><h2>From the listing</h2>
         <div class="row"><label for="q_price">Asking price</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_price" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="850,000"></div></div>
         <div class="row"><label for="q_revenue">Gross revenue</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_revenue" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="1,300,000"></div></div>
+        <div class="row"><label for="q_extra">Inventory or extras on top<i>Added to the price, e.g. inventory at cost</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_extra" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="0"></div></div>
         <div class="row"><label for="q_ebitda">EBITDA<i>Optional; leave 0 if not listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_ebitda" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="200,000"></div></div>
       </div>
       <div class="sec"><h2>Cash flow (SDE)</h2>
@@ -374,7 +398,7 @@ var THRESH = [
   ["margin","SDE margin (quick screen)","%",20,10,"min"],
   ["sdeDrop","SDE drop before DSCR hits floor (quick screen)","%",30,15,"min"]
 ];
-var Q_DEFAULT = {price:850000, sde:280000, revenue:1300000, ebitda:200000};
+var Q_DEFAULT = {price:850000, sde:280000, revenue:1300000, ebitda:200000, extra:0};
 var QB = [["net",1,150000],["salary",1,80000],["benefits",1,18000],["interest",1,12000],["da",1,20000],["onetime",1,0],["personal",1,8000],["less",-1,0]];
 // Rough SDE margins for owner-operated businesses; starting points only.
 var INDUSTRIES = [
@@ -384,6 +408,13 @@ var INDUSTRIES = [
   ["prof","Professional services / agency",22],
   ["health","Healthcare practice (dental, vet, PT)",22],
   ["auto","Auto repair",17],
+  ["autodeal","Used car dealer",8],
+  ["wash","Laundromat / car wash",25],
+  ["personal","Salon, spa, gym, personal services",15],
+  ["child","Childcare / education",18],
+  ["trans","Trucking / transportation",10],
+  ["bar","Bar / brewery",12],
+  ["conv","Convenience store, gas, liquor",6],
   ["trades","Construction / specialty trades",12],
   ["mfg","Manufacturing",15],
   ["ecom","E-commerce",15],
@@ -482,6 +513,7 @@ function readState(){
   s.name = document.getElementById("dealName").value;
   s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
   s.q.sdeListed = s.q.sde;
+  s.q.listing = {text:document.getElementById("lfText").value, facts:listing.facts};
   s.q.sdeMode = document.querySelector("#sdeTabs [aria-pressed=true]").dataset.m;
   s.q.build = {total:0}; QB.forEach(function(b){ var val = parse(document.getElementById("qb_"+b[0]).value); s.q.build[b[0]] = val; s.q.build.total += b[1]*val; });
   s.q.ind = document.getElementById("qe_ind").value;
@@ -515,6 +547,10 @@ function writeState(s){
   document.getElementById("qe_margin").value = q.margin != null ? q.margin : Q2_DEFAULT.margin;
   document.getElementById("qe_owner").value = fmtInput("$", q.ownerComp != null ? q.ownerComp : Q2_DEFAULT.ownerComp);
   setSdeMode(q.sdeMode || Q2_DEFAULT.sdeMode);
+  listing = q.listing && q.listing.facts ? q.listing : {text:(q.listing && q.listing.text) || "", facts:null};
+  document.getElementById("lfText").value = listing.text || "";
+  if(listing.facts) document.getElementById("lfSec").open = true;
+  renderFound();
 }
 
 /* ---------- math ---------- */
@@ -750,42 +786,112 @@ function renderProj(){
 var ZERO_SC = {revChg:0, cmChg:0, growth:0, rateChg:0};
 function screenCalc(s, price){
   // Listing numbers only: no capex, working capital, closing costs or reserve.
-  var v = Object.assign({}, s.v, {price:price, revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
+  var v = Object.assign({}, s.v, {price:price + (s.q.extra||0), revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
     overhead:0, payroll:0, capex:0, wc:0, closing:0, reserve:0});
+  var lf = s.q.listing && s.q.listing.facts;
+  if(lf && lf.sellerPct > 0) v.sellerPct = lf.sellerPct;
   var R = calc({v:v, sc:{cons:ZERO_SC, base:ZERO_SC, aggr:ZERO_SC}, t:s.t});
   return {R:R, o:R.sc.base};
 }
 function greenPrice(s){
-  var T = s.t, q = s.q;
-  function ok(p){ var o = screenCalc(s, p).o;
-    return o.dscr >= T.dscr[0] && o.cfCush >= T.cfCush[0] && p/q.sde <= T.sdeMult[0] && (!(q.ebitda > 0) || p/q.ebitda <= T.ebitdaMult[0]); }
-  var lo = 0, hi = Math.max(q.price, q.sde*20);
+  var T = s.t, q = s.q, x = q.extra || 0;
+  function ok(p){ var o = screenCalc(s, p).o, tot = p + x;
+    return o.dscr >= T.dscr[0] && o.cfCush >= T.cfCush[0] && tot/q.sde <= T.sdeMult[0] && (!(q.ebitda > 0) || tot/q.ebitda <= T.ebitdaMult[0]); }
+  var lo = 0, hi = Math.max(q.price || 0, q.sde*20);
   if(!ok(1)) return 0;
   for(var i=0; i<50; i++){ var mid = (lo+hi)/2; if(ok(mid)) lo = mid; else hi = mid; }
   return Math.floor(lo/1000)*1000;
 }
+function estCheck(q){
+  var f = q.listing && q.listing.facts;
+  return {c:"y", t:"Cash flow is estimated", m:money(q.sde),
+    d: (f && f.onRequest ? "The listing holds financials back until you ask. " : "") +
+      (q.byEbitda ? "SDE isn't disclosed, so it's EBITDA plus "+money(q.ownerComp)+" of assumed owner comp. Ask the broker for the seller's actual pay."
+      : "Neither SDE nor EBITDA is disclosed, so it's revenue × "+q.margin+"%"+(f && f.industry && f.industry.key===q.ind ? " (typical for "+f.industry.label.toLowerCase()+")" : "")+". Every number below depends on that guess. Ask for the P&L before going further.")};
+}
+// Facts pulled from a pasted listing. Checks marked info explain but don't move the verdict.
+function listingChecks(q, v, o){
+  var f = q.listing && q.listing.facts; if(!f) return [];
+  var out = [];
+  function C(c,t,d,m){ out.push({c:c, t:t, d:d, m:m||""}); }
+  function I(c,t,d,m){ out.push({c:c, t:t, d:d, m:m||"", info:true}); }
+  if(f.revMonths && f.revMonths !== 12 && f.revenue === q.revenue)
+    C("y","Revenue is annualized", money(f.revRaw)+" over "+f.revMonths+" month"+(f.revMonths>1?"s":"")+(f.revPeriod ? " ("+f.revPeriod+")" : "")+", scaled to 12 months. Seasonal businesses can be far off, so ask for monthly sales for the last two years.", money(f.revenue)+"/yr");
+  if(f.rent > 0 && q.revenue > 0){
+    var occ = f.rent/q.revenue*100, oc = occ <= 8 ? "g" : occ <= 12 ? "y" : "r";
+    C(oc, "Rent vs. revenue", "Rent is "+money(f.rent)+"/yr, "+pct(occ)+" of revenue. "+
+      (oc==="g" ? "A manageable occupancy cost." : oc==="y" ? "On the high side; rent is a common reason small businesses struggle." : "High: rent takes a big share of sales before anything else is paid.")+
+      (f.leased ? " The location is leased, so check the remaining term, renewal options and whether the landlord will assign the lease to you." : ""), pct(occ)+" of revenue");
+  } else if(f.leased) I("y","Location is leased","Check the remaining lease term, renewal options and whether the landlord will assign it to you.");
+  if(f.inventory > 0){
+    if(f.invIncluded === false) I("y","Inventory is on top of the price", money(f.inventory)+" of inventory is sold separately, so it's added to the price in these numbers.", "+"+money(f.inventory));
+    else if(f.invIncluded === true) I("g","Inventory included", money(f.inventory)+" of inventory comes with the business at the asking price.", money(f.inventory));
+    else C("y","Inventory: included or extra?", "The listing mentions "+money(f.inventory)+" of inventory but not whether the price includes it. If it's extra, enter it under Inventory or extras.", money(f.inventory));
+  } else if(f.invUnits){
+    C("y","Inventory value not stated", f.invUnits+" "+f.invUnitWord+" in inventory, with no dollar value. Ask whether they're included in the price. "+
+      (f.industry && f.industry.key==="autodeal" ? "Car lots usually sell vehicles separately at cost, which means more cash at close or floor-plan financing, and it's what the lot needs to keep selling." : "Inventory sold separately at cost adds to the cash you need at close."), f.invUnits+" "+f.invUnitWord);
+  }
+  if(f.realEstate==="included") C("y","Real estate is in the price", "Split out the property's value: the business alone costs less than the multiple suggests, and SBA lenders finance real estate over 25 years instead of 10.");
+  else if(f.realEstate==="available") I("g","Real estate available", "The property can be bought separately, which gives you options on occupancy cost.");
+  if(f.ffe > 0) I("g","Hard assets", money(f.ffe)+" of FF&E or equipment gives a lender collateral.", money(f.ffe));
+  if(f.sellerFin) I("g","Seller financing offered", f.sellerPct ? "The listing mentions "+f.sellerPct+"% seller financing, so the screen uses that instead of your default." : "Ask for 10–20% as a seller note; it lowers your cash at close and keeps the seller invested in a smooth handover.", f.sellerPct ? f.sellerPct+"%" : "");
+  if(f.sba) I("g","SBA pre-qualified","A lender has already reviewed the deal, which usually speeds up financing.");
+  if(f.owner==="absentee" || f.owner==="semi") I("g", f.owner==="semi" ? "Semi-absentee" : "Absentee owner", "The seller doesn't run it day to day, so SDE may already cover a manager. Confirm who does the work.");
+  else if(f.owner==="operator") I("y","Owner-operated", "SDE includes the seller's labor"+(o ? ". If you hire a manager at "+money(v.mgr)+", cash after debt drops to "+money(o.cfm)+"." : "; you'd be buying a job unless you hire a manager."), o ? money(o.cfm) : "");
+  if(f.onRequest && !q.sdeEst) I("y","Financials on request","Ask for three years of tax returns, P&Ls and bank statements before spending more time.");
+  if(f.licenses.length) I("y","Licenses need to transfer", "Mentions "+f.licenses.join(", ")+". Licenses like these usually have to be reissued in the new owner's name, so confirm timing before you commit to a closing date.");
+  if(f.years) I(f.years >= 3 ? "g" : "y", f.years >= 3 ? "Track record" : "Young business", f.yearsText+". "+(f.years >= 10 ? "A long history lowers the risk that sales depend on a fad" : f.years >= 3 ? "Enough history to judge a trend; ask for every year" : "Little history to judge; weigh recent numbers carefully")+(f.yearsLocation ? ". Note it may describe the location rather than this owner's business." : "."), f.years+"+ yrs");
+  if(f.reviews) I("g","Strong reviews", f.reviews+" five-star reviews mentioned. Reputation usually survives a handover if the key staff stay.", f.reviews+" × 5★");
+  if(f.employees) I("n","Staff", f.employees+" employees mentioned. Ask who's essential and whether they'll stay.", f.employees+" staff");
+  if(f.motivation) I("g","Seller motivation", "The seller is "+f.motivation+". Motivated sellers tend to negotiate on price and terms.");
+  return out;
+}
+var PILL = {r:"Red", y:"Watch", g:"Good", n:"Info"};
+function renderChecks(el, checks){
+  var order = {r:0, y:1, g:2, n:3};
+  checks.sort(function(a,b){ return (a.info?4:0) - (b.info?4:0) || order[a.c]-order[b.c]; });
+  el.innerHTML = checks.map(function(x){
+    return '<li'+(x.info ? ' class="info"' : '')+'><span class="pill '+x.c+'">'+PILL[x.c]+'</span><span class="t">'+x.t+'<small>'+x.d+'</small></span><span class="m '+x.c+'">'+x.m+'</span></li>';
+  }).join("");
+}
 function renderScreen(s){
-  var q = s.q, T = s.t, v = s.v;
+  var q = s.q, T = s.t, v = s.v, lf = q.listing && q.listing.facts;
+  var sellerPct = lf && lf.sellerPct > 0 ? lf.sellerPct : v.sellerPct;
   var vEl = document.getElementById("qVerdict"), tEl = document.getElementById("qTiles"), wEl = document.getElementById("qWhy"), gEl = document.getElementById("qTarget");
   document.getElementById("qAssume").innerHTML =
-    '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+v.sellerPct+'%</b> at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
+    '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+sellerPct+'%</b>'+(sellerPct !== v.sellerPct ? ' (from listing)' : '')+' at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
     '<li>Bank / SBA at <b>'+v.bankRate+'%</b> / <b>'+v.bankTerm+' yrs</b>, fees <b>'+v.feePct+'%</b>'+(v.feeFin?' rolled in':' paid in cash')+'</li>'+
     (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
     '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>';
   last.screen = null;
   document.getElementById("qb_total").textContent = money(q.build.total);
-  document.getElementById("qe_total").textContent = money(q.sdeMode==="est" ? q.sde : effSDE(Object.assign({}, q, {sdeMode:"est"})).sde);
-  document.getElementById("qe_method").textContent = "Estimated SDE (" + effSDE(Object.assign({}, q, {sdeMode:"est"})).method + ")";
+  var estE = effSDE(Object.assign({}, q, {sdeMode:"est"}));
+  document.getElementById("qe_total").textContent = money(estE.sde);
+  document.getElementById("qe_method").textContent = "Estimated SDE (" + estE.method + ")";
+  var extra = q.extra || 0, total = q.price + extra;
 
   if(!(q.price > 0 && q.sde > 0 && q.revenue > 0)){
     var need = q.sdeMode==="listed" ? "Asking price, cash flow and revenue are all needed for a verdict. No SDE on the listing? Switch to Build from P&L or Not disclosed."
       : q.sdeMode==="build" ? "The recast SDE is zero or negative. Check the P&L figures, and enter asking price and revenue."
       : "Enter asking price and revenue (and EBITDA if it's listed) to estimate cash flow.";
-    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Enter the listing</span><p>'+need+'</p>';
-    tEl.innerHTML = ""; wEl.innerHTML = ""; gEl.innerHTML = ""; return;
+    var word = "Enter the listing", pre = [];
+    tEl.innerHTML = ""; gEl.innerHTML = "";
+    if(!(q.price > 0) && q.sde > 0 && q.revenue > 0){
+      word = "Needs an asking price";
+      need = "The listing doesn't give a price. Enter one under From the listing for a verdict. Below is what the "+(q.sdeEst ? "estimated " : "")+"cash flow can support.";
+      if(q.sdeEst) pre.push(estCheck(q));
+      var gp0 = greenPrice(s);
+      gEl.innerHTML = q.sde < v.ownerDraw
+        ? "Even with no debt at all, "+(q.sdeEst ? "estimated " : "")+"SDE of <b>"+money(q.sde)+"</b> is below the <b>"+money(v.ownerDraw)+"</b> you need to live on. Unless the real numbers are much better, this business can't support you at any price."
+        : !gp0 ? "No price gets every check green with this cash flow and your terms."
+        : "Highest price where every check is green: about <b>"+money(gp0)+"</b>"+(extra > 0 ? ", plus the "+money(extra)+" of extras" : "")+".";
+    }
+    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">'+word+'</span><p>'+need+'</p>';
+    renderChecks(wEl, pre.concat(listingChecks(q, v, null)));
+    return;
   }
   var X = screenCalc(s, q.price), o = X.o, R = X.R;
-  var sdeMult = q.price/q.sde, ebMult = q.ebitda > 0 ? q.price/q.ebitda : NaN;
+  var sdeMult = total/q.sde, ebMult = q.ebitda > 0 ? total/q.ebitda : NaN;
   var margin = q.sde/q.revenue*100;
   var drop = o.ds > 0 ? (1 - T.dscr[1]*o.ds/q.sde)*100 : 100;
   var checks = [], dataErr = false;
@@ -794,9 +900,7 @@ function renderScreen(s){
   if(q.ebitda > q.sde) checks.push({c:"y", t:"EBITDA is above SDE", d:"SDE normally equals EBITDA plus the owner's pay, so this listing may be mislabeled. Ask the broker.", m:""});
 
   var c;
-  if(q.sdeEst) checks.push({c:"y", t:"Cash flow is estimated", m:money(q.sde),
-    d: q.byEbitda ? "SDE isn't disclosed, so it's EBITDA plus "+money(q.ownerComp)+" of assumed owner comp. Ask the broker for the seller's actual pay."
-      : "Neither SDE nor EBITDA is disclosed, so it's revenue × "+q.margin+"%. Every number below depends on that guess. Ask for the P&L before going further."});
+  if(q.sdeEst) checks.push(estCheck(q));
   if(q.sdeMode==="build"){
     var soft = q.build.onetime + q.build.personal;
     var softPct = q.sde > 0 ? soft/q.sde*100 : 0;
@@ -805,9 +909,10 @@ function renderScreen(s){
   }
   c = rag("sdeMult", sdeMult, T);
   checks.push({c:c, t:"Price vs. cash flow", m:mult(sdeMult)+" SDE",
-    d: c==="g" ? "At or under "+T.sdeMult[0]+"x SDE, which is a fair-to-cheap price for a Main Street business."
+    d: (extra > 0 ? "Counting the "+money(extra)+" of extras on top of the asking price. " : "") +
+      (c==="g" ? "At or under "+T.sdeMult[0]+"x SDE, which is a fair-to-cheap price for a Main Street business."
      : c==="y" ? "Between "+T.sdeMult[0]+"x and "+T.sdeMult[1]+"x SDE: a full price. The quality of the earnings has to justify it."
-     : "Above "+T.sdeMult[1]+"x SDE, rich for a small business. Expect to negotiate hard or walk away."});
+     : "Above "+T.sdeMult[1]+"x SDE, rich for a small business. Expect to negotiate hard or walk away.")});
   if(q.ebitda > 0){
     c = rag("ebitdaMult", ebMult, T);
     checks.push({c:c, t:"Price vs. EBITDA", m:mult(ebMult)+" EBITDA",
@@ -829,8 +934,10 @@ function renderScreen(s){
     d: c==="g" ? "Cash flow is a healthy share of revenue, which usually means pricing power or a lean cost structure."
      : c==="y" ? "Moderate margin. Normal in some industries (distribution, restaurants, construction), but a small revenue dip hurts."
      : "Thin margin: a small drop in sales or rise in costs can wipe out cash flow."});
+  checks = checks.concat(listingChecks(q, v, o));
 
-  var reds = checks.filter(function(x){return x.c==="r";}).length, yellows = checks.filter(function(x){return x.c==="y";}).length;
+  var counted = checks.filter(function(x){ return !x.info; });
+  var reds = counted.filter(function(x){return x.c==="r";}).length, yellows = counted.filter(function(x){return x.c==="y";}).length;
   var verdict, why;
   if(dataErr){
     vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Check the numbers</span><p>Cash flow can\'t be equal to or above revenue. Fix the listing figures and the verdict will appear.</p>';
@@ -849,7 +956,7 @@ function renderScreen(s){
     verdict = "g"; why = "Price, debt coverage and your take-home all clear the bar. Worth requesting financials to verify the cash flow is real.";
   } else {
     verdict = "y";
-    var weak = checks.filter(function(x){return x.c!=="g" && x.t!=="Cash flow is estimated";}).map(function(x){return x.t.replace(/\?$/,"").toLowerCase();});
+    var weak = counted.filter(function(x){return x.c!=="g" && x.t!=="Cash flow is estimated";}).map(function(x){return x.t.replace(/\?$/,"").toLowerCase();});
     why = (q.sdeEst ? "SDE is an estimate ("+q.sdeMethod+"), so confirm it first. " : "") +
       (weak.length ? "Nothing rules it out, but it misses a green light on: "+weak.join("; ")+". Dig into these before spending money on diligence." : "On the estimate, nothing else is a problem.");
   }
@@ -860,24 +967,205 @@ function renderScreen(s){
   last.screen = {verdict:WORD[verdict], why:why};
 
   tEl.innerHTML = [
-    ["Multiple", mult(sdeMult), q.sdeEst ? "of estimated SDE" : q.sdeMode==="build" ? "of recast SDE" : "of SDE", rag("sdeMult",sdeMult,T)],
+    ["Multiple", mult(sdeMult), (q.sdeEst ? "of estimated SDE" : q.sdeMode==="build" ? "of recast SDE" : "of SDE")+(extra > 0 ? ", incl. extras" : ""), rag("sdeMult",sdeMult,T)],
     ["DSCR", dscrF(o.dscr), money(o.ds)+" / yr debt", dscrC],
     ["Cash after debt", money(o.cfad), "before your pay & taxes", payC],
     ["Down payment", money(R.cash), "plus closing costs & working capital", ""]
   ].map(function(t){ return '<div class="tile '+t[3]+'"><div class="k">'+t[0]+'</div><div class="val">'+t[1]+'</div><div class="sub">'+t[2]+'</div></div>'; }).join("");
 
-  var order = {r:0,y:1,g:2};
-  checks.sort(function(a,b){ return order[a.c]-order[b.c]; });
-  wEl.innerHTML = checks.map(function(x){
-    return '<li><span class="pill '+x.c+'">'+(x.c==="r"?"Red":x.c==="y"?"Watch":"Good")+'</span><span class="t">'+x.t+'<small>'+x.d+'</small></span><span class="m '+x.c+'">'+x.m+'</span></li>';
-  }).join("");
+  renderChecks(wEl, checks);
 
-  var minSde = Math.max(T.dscr[0]*o.ds, o.ds + v.ownerDraw*(1 + T.cfCush[0]/100), q.price/T.sdeMult[0]);
+  var minSde = Math.max(T.dscr[0]*o.ds, o.ds + v.ownerDraw*(1 + T.cfCush[0]/100), total/T.sdeMult[0]);
   var minLine = (q.sdeEst ? "Ask the broker: at the asking price" : "At the asking price") + ", SDE needs to be at least <b>"+money(minSde)+"</b> ("+pct(minSde/q.revenue*100)+" of revenue) for every check to be green.";
   var gp = greenPrice(s);
-  gEl.innerHTML = minLine + "<br>" + (!gp ? "No price gets every check to green with this cash flow and these terms."
+  gEl.innerHTML = minLine + "<br>" + (q.sde < v.ownerDraw ? "Even with no debt at all, "+(q.sdeEst ? "estimated " : "")+"SDE of <b>"+money(q.sde)+"</b> is below the <b>"+money(v.ownerDraw)+"</b> you need to live on, so no price makes this work unless the real numbers are better."
+    : !gp ? "No price gets every check to green with this cash flow and these terms."
     : gp >= q.price ? "Asking price is within the green range. Every check stays green up to about <b>"+money(gp)+"</b>."
     : "Offer to aim for: about <b>"+money(gp)+"</b> ("+pct((1-gp/q.price)*100,0)+" below asking). That's the highest price where the multiple, DSCR and your take-home all turn green.");
+}
+
+/* ---------- listing reader ---------- */
+var listing = {text:"", facts:null};
+var MONTHS = ["jan","feb","mar","apr","may","jun","jul","aug","sep","oct","nov","dec"];
+var NUM = "\\$?[ \\t]?(\\d[\\d,]*(?:\\.\\d+)?)[ \\t]?(k|mm|m|mil|million|thousand)?\\b";
+var INDUSTRY_KEYS = [
+  ["autodeal",/used car|car lot|auto sales|car dealer|pre[- ]owned (?:vehicles|cars)|buy here,? pay here|dealer licen[cs]e/i],
+  ["auto",/auto repair|mechanic|collision|body shop|tire shop|oil change|transmission shop/i],
+  ["wash",/laundromat|car wash|coin laundry/i],
+  ["conv",/convenience store|gas station|liquor store|c-store|fuel station/i],
+  ["food",/restaurant|\bcafe\b|café|coffee shop|bakery|pizz|food truck|catering|\bdiner\b|bistro|\bdeli\b/i],
+  ["bar",/\bbar\b|tavern|\bpub\b|brewery|nightclub/i],
+  ["health",/dental|dentist|veterinar|physical therapy|chiropract|medical practice|med spa|clinic/i],
+  ["home",/hvac|plumb|electrical contractor|electrician|roofing|garage door|pest control|pool service/i],
+  ["clean",/landscap|lawn care|cleaning|janitorial|maid service|pressure washing/i],
+  ["child",/daycare|day care|child ?care|preschool|tutoring|learning center/i],
+  ["personal",/salon|\bspa\b|barber|\bgym\b|fitness|yoga|martial arts|nail/i],
+  ["trans",/trucking|freight|logistics|courier|moving company|transportation/i],
+  ["mfg",/manufactur|machine shop|fabricat/i],
+  ["dist",/distribut|wholesale/i],
+  ["trades",/construction|general contractor|remodel|concrete|excavat|paving/i],
+  ["ecom",/e-?commerce|amazon fba|shopify|online store/i],
+  ["prof",/agency|consulting|accounting|bookkeeping|staffing|insurance agency|law firm/i],
+  ["retail",/retail|boutique|\bstore\b/i]
+];
+function toMoney(n, u){
+  var x = parseFloat(String(n).replace(/,/g,"")); if(!isFinite(x)) return NaN;
+  u = (u||"").toLowerCase();
+  if(u==="k" || u==="thousand") x *= 1e3; else if(u==="m" || u==="mm" || u==="mil" || u==="million") x *= 1e6;
+  return x;
+}
+function labeled(t, labels){
+  // "Label: $X" anywhere, or "Label" alone at the start of a line with the value on the next line,
+  // the way listing sites lay out their summary box
+  var val = "(?:(not disclosed|undisclosed|n\\/a|na|tbd|upon request|available upon request)\\b|"+NUM+")";
+  var paren = "(?:[ \\t]*\\([^)\\n]{0,30}\\))?";
+  var m = new RegExp("(?:^|\\n)[ \\t•*-]*(?:"+labels+")"+paren+"[ \\t]*(?::|–|-)?[ \\t]*\\n[ \\t]*"+val, "i").exec(t) ||
+          new RegExp("\\b(?:"+labels+")"+paren+"[ \\t]*(?::|–)[ \\t]*"+val, "i").exec(t);
+  if(!m) return null;
+  if(m[1]) return {na:true};
+  return {val:toMoney(m[2], m[3]), end:m.index + m[0].length};
+}
+function cap(w){ return w.charAt(0).toUpperCase() + w.slice(1); }
+function parseListing(text){
+  var t = text.replace(/\r/g,""), f = {licenses:[]}, m, now = new Date();
+  var p = labeled(t, "asking price|asking|list(?:ing)? price|purchase price|sale price|price");
+  if(!p){ m = new RegExp("(?:asking(?: price)?(?: of| is)?|priced at|price of|listed at|offered at)\\s*"+NUM, "i").exec(t); if(m) p = {val:toMoney(m[1], m[2])}; }
+  if(p && p.val > 0) f.price = p.val;
+
+  var sd = labeled(t, "cash flow|seller'?s? discretionary earnings|discretionary earnings|sde|owner'?s? (?:benefit|cash flow|earnings)|seller'?s? earnings|net to owner");
+  if(!sd){ m = new RegExp(NUM+"[ \\t]*(?:in|of)?[ \\t]*(?:annual[ \\t]+)?(?:cash flow|sde|discretionary earnings|owner benefit)", "i").exec(t); if(m) sd = {val:toMoney(m[1], m[2])}; }
+  if(sd && sd.val > 0) f.sde = sd.val;
+
+  var eb = labeled(t, "adjusted ebitda|ebitda"); if(eb && eb.val > 0) f.ebitda = eb.val;
+
+  var rv = labeled(t, "gross revenue|gross sales|annual revenue|annual sales|total revenue|revenue|sales"), rvEnd = null;
+  if(rv && rv.val > 0){ f.revRaw = rv.val; rvEnd = rv.end; }
+  else {
+    m = new RegExp(NUM+"[ \\t]*(?:in|of)?[ \\t]*(?:gross[ \\t]+|annual[ \\t]+|total[ \\t]+|yearly[ \\t]+)?(?:revenue|sales)", "i").exec(t) ||
+        new RegExp("(?:revenue|sales)\\s*(?:of|at|around|about|approximately|near|~)\\s*"+NUM, "i").exec(t);
+    if(m){ f.revRaw = toMoney(m[1], m[2]); rvEnd = m.index + m[0].length; }
+  }
+  if(f.revRaw > 0){
+    var tail = t.slice(rvEnd, rvEnd + 80).toLowerCase(), months = 12, per = "", mm;
+    if((mm = tail.match(/(?:from|between)\s+([a-z]{3})[a-z]*\.?\s+(?:to|through|thru|until|and|-|–)\s+([a-z]{3})/)) && MONTHS.indexOf(mm[1]) >= 0 && MONTHS.indexOf(mm[2]) >= 0){
+      months = (MONTHS.indexOf(mm[2]) - MONTHS.indexOf(mm[1]) + 12) % 12 + 1; per = cap(mm[1])+"–"+cap(mm[2]);
+    } else if(/^[^.\n]{0,15}(?:per month|a month|monthly|\/\s?mo\b)/.test(tail)){ months = 1; per = "per month"; }
+    else if((mm = tail.match(/(?:first|past|last|in|over)\s+(\d{1,2})\s+months/))){ months = +mm[1]; per = mm[0]; }
+    else if(/\b(?:ytd|year[- ]to[- ]date|so far this year)\b/.test(tail)){ months = Math.max(1, now.getMonth()); per = "year to date, assumed through "+cap(MONTHS[months-1]); }
+    f.revMonths = months; f.revPeriod = per; f.revenue = Math.round(f.revRaw*12/months);
+  }
+
+  m = t.match(/(?:rent|lease[ds]?|leasing)[^.\n$]{0,40}\$\s?(\d[\d,]*(?:\.\d+)?)\s?(k)?\s*(?:\/\s?|a\s|per\s|each\s)?\s*(month|mo\b|year|yr|annual|annually|monthly)?/i);
+  if(m){ var r = toMoney(m[1], m[2]), perd = (m[3]||"").toLowerCase(), monthly = /^mo/.test(perd) || (!perd && r < 25000);
+    f.rent = monthly ? r*12 : r; f.rentMonthly = monthly; }
+  if(/\blease[ds]?\b|\bleasing\b|\brent(?:ed|s)?\b/i.test(t) && !/real estate[^.\n]{0,20}included/i.test(t)) f.leased = true;
+
+  var inv = labeled(t, "inventory(?: value| at cost)?"), invEnd = null;
+  if(inv && inv.val >= 1000){ f.inventory = inv.val; invEnd = inv.end; }
+  else {
+    m = new RegExp("inventory[^.\\n$]{0,25}\\$[ \\t]?(\\d[\\d,]*(?:\\.\\d+)?)[ \\t]?(k|mm|m|million)?\\b", "i").exec(t) ||
+        new RegExp("\\$[ \\t]?(\\d[\\d,]*(?:\\.\\d+)?)[ \\t]?(k|mm|m|million)?\\b[ \\t]*(?:in|of|worth of)?[ \\t]*inventory", "i").exec(t);
+    if(m){ f.inventory = toMoney(m[1], m[2]); invEnd = m.index + m[0].length; }
+  }
+  var invTail = invEnd != null ? t.slice(invEnd).split("\n")[0] : "";
+  if(/not included|additional|extra|on top|at cost|separate|in addition|plus/i.test(invTail) || /(?:plus|\+)[ \t]*inventory|inventory[^.\n]{0,40}(?:not included|additional|extra|on top|at cost|separate|in addition)/i.test(t)) f.invIncluded = false;
+  else if(/included|including/i.test(invTail) || /(?:includ(?:es|ing)|with)[ \t]+(?:all[ \t]+)?inventory|inventory[^.\n]{0,30}\bincluded\b/i.test(t)) f.invIncluded = true;
+  m = t.match(/(\d+)\s+(cars|vehicles|trucks|units|boats|trailers|machines)\s+(?:in|of)\s+(?:current\s+)?(?:inventory|stock)/i) || t.match(/inventory\s+of\s+(\d+)\s+(cars|vehicles|trucks|units|boats|trailers)/i);
+  if(m){ f.invUnits = +m[1]; f.invUnitWord = m[2].toLowerCase(); }
+
+  var fe = labeled(t, "ff&e|furniture,? fixtures(?:,? (?:&|and) equipment)?|equipment value|equipment"); if(fe && fe.val >= 1000) f.ffe = fe.val;
+
+  if(/real estate[^.\n]{0,30}not included/i.test(t)) f.realEstate = null;
+  else if(/real estate[^.\n]{0,30}\bincluded|includ(?:es|ing)\s+(?:the\s+)?(?:real estate|building|property|land)\b/i.test(t)) f.realEstate = "included";
+  else if(/real estate[^.\n]{0,30}(?:available|for sale|can be purchased|optional)/i.test(t)) f.realEstate = "available";
+
+  m = t.match(/[^.\n]*(?:(?:seller|owner)[- ]?financ|(?:seller|owner) (?:will|may|to) carry)[^.\n]*/i);
+  if(m && !/\bno (?:seller|owner)[- ]?financ|financing (?:is )?not (?:available|offered)/i.test(m[0])){
+    f.sellerFin = true;
+    var pm = m[0].match(/(\d{1,2}(?:\.\d)?)\s?%/);
+    if(pm) f.sellerPct = +pm[1];
+    else if(f.price > 0){ var am = new RegExp(NUM).exec(m[0].replace(/\d+\s?%/g,"")); if(am){ var sv = toMoney(am[1], am[2]); if(sv > 1000 && sv < f.price) f.sellerPct = Math.round(sv/f.price*1000)/10; } }
+  }
+  if(/\bsba\b[^.\n]{0,25}(?:pre-?qualified|prequal|approved|eligible)/i.test(t)) f.sba = true;
+
+  if(/semi[- ]?absentee/i.test(t)) f.owner = "semi";
+  else if(/\babsentee\b/i.test(t)) f.owner = "absentee";
+  else if(/owner[- ]operat|owner works|owner is (?:on[- ]site|full[- ]time)/i.test(t)) f.owner = "operator";
+
+  m = t.match(/employees[ \t]*[:\-]?[ \t]*\n?[ \t]*(\d{1,4})\b(?![\d,])/i) || t.match(/\b(\d{1,4})[ \t]*(?:full[- ]time[ \t]+|part[- ]time[ \t]+|ft[ \t]+|pt[ \t]+)?(?:employees|staff members|staff|workers|technicians|techs)\b/i);
+  if(m && +m[1] > 0) f.employees = +m[1];
+
+  m = t.match(/(?:established|founded|in business since|year established|since|opened in)[ \t]*:?[ \t]*\n?[ \t]*(?:in[ \t]+)?((?:19|20)\d{2})\b/i);
+  if(m){ f.years = now.getFullYear() - +m[1]; f.yearsText = "In business since "+m[1]; }
+  else {
+    t.split(/[.\n]/).some(function(sn){
+      var ym = sn.match(/(\d{1,3})\+?\s*(?:years|yrs)\b/i);
+      if(ym && /establish|business|been|operat|history|serving|family[- ]owned|owned/i.test(sn)){
+        f.years = +ym[1]; f.yearsText = 'The listing says "'+sn.trim().slice(0,100)+'"';
+        f.yearsLocation = /location|building|site|lot\b/i.test(sn) && !/business|company/i.test(sn);
+        return true;
+      }
+      return false;
+    });
+  }
+
+  var seen = {}, lm, lre = /((?:[a-z&-]+\s+){0,2})licen[cs]es?\b/gi;
+  while((lm = lre.exec(t)) && f.licenses.length < 3){
+    var ph = lm[0].toLowerCase().replace(/^(?:(?:all|active|the|a|and|with|current|valid|full|has|have|an)\s+)+/, "").trim();
+    if(ph && !seen[ph]){ seen[ph] = 1; f.licenses.push(ph); }
+  }
+
+  var rs = 0, rm, rre = /(\d+)\+?\s*(?:5|five)[- ]?(?:star|★)/gi;
+  while((rm = rre.exec(t))) rs += +rm[1];
+  if(rs) f.reviews = rs;
+
+  if(/financials?[^.\n]{0,30}(?:upon|on|by)\s+request|available (?:upon|after) (?:request|nda)|after (?:signing an? )?nda/i.test(t)) f.onRequest = true;
+
+  if(/retir/i.test(t)) f.motivation = "retiring";
+  else if(/health (?:reasons|issues)/i.test(t)) f.motivation = "selling for health reasons";
+  else if(/relocat/i.test(t)) f.motivation = "relocating";
+  else if(/other (?:business|ventures|interests|opportunit)/i.test(t)) f.motivation = "moving on to other ventures";
+  else if(/motivated seller|must sell/i.test(t)) f.motivation = "motivated";
+
+  for(var i = 0; i < INDUSTRY_KEYS.length; i++){
+    if(INDUSTRY_KEYS[i][1].test(t)){
+      var ind = INDUSTRIES.filter(function(x){ return x[0]===INDUSTRY_KEYS[i][0]; })[0];
+      if(ind){ f.industry = {key:ind[0], label:ind[1], margin:ind[2]}; break; }
+    }
+  }
+  return f;
+}
+function applyListing(f){
+  var set = function(id, val){ document.getElementById(id).value = fmtInput("$", val || 0); };
+  set("q_price", f.price); set("q_revenue", f.revenue); set("q_ebitda", f.ebitda);
+  set("q_extra", f.invIncluded === false && f.inventory > 0 ? f.inventory : 0);
+  if(f.industry){ document.getElementById("qe_ind").value = f.industry.key; document.getElementById("qe_margin").value = f.industry.margin; }
+  if(f.sde > 0){ set("q_sde", f.sde); setSdeMode("listed"); } else setSdeMode("est");
+}
+function renderFound(){
+  var el = document.getElementById("lfFound"), f = listing.facts;
+  if(!f){ el.innerHTML = ""; return; }
+  var rows = [];
+  function row(ok, k, val, note){ rows.push('<li class="'+(ok ? "ok" : "miss")+'"><span class="k">'+k+'</span><span class="fv">'+val+'</span>'+(note ? '<small>'+note+'</small>' : '')+'</li>'); }
+  row(f.price > 0, "Asking price", f.price > 0 ? money(f.price) : "Not found", f.price > 0 ? "" : "Enter it under From the listing");
+  row(f.sde > 0, "Cash flow (SDE)", f.sde > 0 ? money(f.sde) : "Not disclosed", f.sde > 0 ? "" : "Estimating it from "+(f.ebitda > 0 ? "EBITDA" : "revenue")+" on the Not disclosed tab");
+  row(f.revenue > 0, "Revenue", f.revenue > 0 ? money(f.revenue)+"/yr" : "Not found", f.revMonths && f.revMonths !== 12 ? "Annualized from "+money(f.revRaw)+" over "+f.revMonths+" month"+(f.revMonths > 1 ? "s" : "")+(f.revPeriod ? " ("+f.revPeriod+")" : "") : "");
+  if(f.ebitda > 0) row(true, "EBITDA", money(f.ebitda));
+  if(f.industry) row(true, "Industry", f.industry.label, "Typical SDE margin "+f.industry.margin+"%, used if cash flow isn't disclosed");
+  if(f.rent) row(true, "Rent", money(f.rent)+"/yr", f.rentMonthly ? money(f.rent/12)+" a month" : "");
+  if(f.inventory) row(true, "Inventory", money(f.inventory), f.invIncluded === false ? "Added on top of the price" : f.invIncluded ? "Included in the price" : "Unclear whether it's included");
+  else if(f.invUnits) row(true, "Inventory", f.invUnits+" "+f.invUnitWord, "No dollar value given");
+  if(f.ffe) row(true, "FF&E / equipment", money(f.ffe));
+  if(f.realEstate) row(true, "Real estate", f.realEstate === "included" ? "Included" : "Available");
+  if(f.sellerFin) row(true, "Seller financing", f.sellerPct ? f.sellerPct+"%" : "Offered", f.sellerPct ? "Replaces your default seller note %" : "");
+  if(f.years) row(true, "History", f.years+"+ years");
+  if(f.employees) row(true, "Employees", String(f.employees));
+  if(f.owner) row(true, "Owner role", {semi:"Semi-absentee", absentee:"Absentee", operator:"Owner-operated"}[f.owner]);
+  if(f.licenses.length) row(true, "Licenses", f.licenses.join(", "));
+  if(f.reviews) row(true, "Reviews", f.reviews+" five-star");
+  if(f.onRequest) row(true, "Financials", "On request");
+  if(f.motivation) row(true, "Seller", cap(f.motivation));
+  el.innerHTML = '<p class="lfhead">Found in the listing</p><ul class="found">'+rows.join("")+'</ul>';
 }
 
 function worst(arr){ return arr.indexOf("r")>=0 ? "r" : arr.indexOf("y")>=0 ? "y" : "g"; }
@@ -929,6 +1217,19 @@ document.getElementById("qe_ind").addEventListener("change", function(){
   render();
 });
 document.getElementById("qe_margin").addEventListener("input", function(){ document.getElementById("qe_ind").value = "custom"; });
+function readListing(){
+  var txt = document.getElementById("lfText").value;
+  if(!txt.trim()){ toast("Paste a listing first"); return; }
+  listing = {text:txt, facts:parseListing(txt)};
+  applyListing(listing.facts); renderFound(); render();
+  var f = listing.facts, n = ["price","sde","revenue","ebitda"].filter(function(k){ return f[k] > 0; }).length;
+  toast("Read "+n+" of 4 key figures");
+}
+document.getElementById("lfRead").addEventListener("click", readListing);
+document.getElementById("lfText").addEventListener("paste", function(){ setTimeout(readListing, 0); });
+document.getElementById("lfClear").addEventListener("click", function(){
+  listing = {text:"", facts:null}; document.getElementById("lfText").value = ""; renderFound(); render(); toast("Listing cleared");
+});
 document.getElementById("sdeTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b){ setSdeMode(b.dataset.m); render(); } });
 [inputsEl, qEl].forEach(function(root){
 inputsEl.addEventListener("change", render);
@@ -954,7 +1255,10 @@ document.getElementById("btnEditTerms").addEventListener("click", function(){
 document.getElementById("btnSend").addEventListener("click", function(){
   var s = readState(), q = s.q, oldRev = s.v.revenue;
   var set = function(id, val){ document.getElementById(id).value = fmtInput("$", val); };
-  set("price", q.price); set("revenue", q.revenue); set("sde", q.sde);
+  set("price", q.price + (q.extra || 0)); set("revenue", q.revenue); set("sde", q.sde);
+  var lf = q.listing && q.listing.facts;
+  if(lf && lf.sellerPct > 0) document.getElementById("sellerPct").value = lf.sellerPct;
+  if(lf && lf.ffe > 0) set("equip", lf.ffe);
   set("ebitda", q.ebitda > 0 ? q.ebitda : Math.max(0, q.sde - s.v.mgr));
   if(oldRev > 0){ var k = q.revenue/oldRev; set("overhead", s.v.overhead*k); set("payroll", s.v.payroll*k); }
   render(); setView("full"); document.getElementById("overhead").focus();
