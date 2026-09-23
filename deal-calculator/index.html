@@ -407,7 +407,7 @@ var SECTIONS = [
     ["fixedInfl","Fixed-cost inflation per year","%",3]
   ]},
   {t:"Your situation", f:[
-    ["ownerDraw","Minimum draw you need","$",100000,"Personal living need, pre-tax"],
+    ["ownerDraw","Minimum draw you need","$",55000,"Personal living need per year, pre-tax"],
     ["mgr","Manager salary, loaded","$",95000,"If you hire someone to run it"]
   ]},
   {t:"Your taxes (Alabama)", f:[
@@ -554,6 +554,7 @@ function readState(){
   SCN.forEach(function(k){ s.sc[k] = {}; SC_FIELDS.forEach(function(f){ s.sc[k][f[0]] = parse(document.getElementById("sc_"+k+"_"+f[0]).value); }); });
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
   s.name = document.getElementById("dealName").value;
+  s.drawSet = true;
   s.link = {costsActual:link.costsActual, ebitdaEst:link.ebitdaEst, rev:link.rev};
   s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
   s.q.sdeListed = s.q.sde;
@@ -569,6 +570,7 @@ function readState(){
 function writeState(s){
   var d = defaults();
   if(s.v && s.v.closing === 45000 && s.v.wc === 100000 && s.v.reserve === 50000) s = Object.assign({}, s, {v:Object.assign({}, s.v, {wc:0})});
+  if(s.v && s.v.ownerDraw === 100000 && !s.drawSet) s = Object.assign({}, s, {v:Object.assign({}, s.v, {ownerDraw:55000})});
   SECTIONS.forEach(function(sec){ sec.f.forEach(function(f){
     if(f[2]==="calc") return;
     var el = document.getElementById(f[0]);
