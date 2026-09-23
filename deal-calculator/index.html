@@ -69,6 +69,10 @@ details[open] > summary::after{content:"\2212"}
 .secnote{font-size:11.5px;color:var(--faint);padding:6px 12px 0}
 .row{display:grid;grid-template-columns:minmax(0,1fr) 132px;align-items:center;gap:8px;padding:3px 12px;min-height:32px}
 .row + .row{border-top:1px dashed var(--line)}
+.row.lnk > label::before{content:"\21C4  ";color:var(--input);font-family:var(--mono);font-size:11px}
+.linknote{font-size:12px;line-height:1.45;color:var(--muted);padding:9px 12px;background:var(--input-bg);border-bottom:1px solid var(--line);border-radius:6px 6px 0 0}
+.linknote b{color:var(--input);font-weight:600}
+.linknote span{display:block;margin-top:3px;color:var(--y)}
 .row label{font-size:13px;line-height:1.25}
 .row label i{display:block;font-style:normal;font-size:11px;color:var(--faint)}
 .cell{position:relative;display:flex;align-items:center}
@@ -275,7 +279,7 @@ table.proj td.n{min-width:88px}
         <ul class="assume" id="qAssume"></ul>
         <div class="qactions">
           <button type="button" id="btnEditTerms">Edit terms &amp; thresholds</button>
-          <button type="button" id="btnSend" class="primary">Underwrite in full</button>
+          <button type="button" id="btnSend" class="primary">Open full underwriting</button>
         </div>
       </div>
     </aside>
@@ -463,8 +467,9 @@ function cellHTML(id, unit, val){
   return '<div class="cell'+(unit==="$"?"":" nopre")+'">'+pre+
     '<input class="v" id="'+id+'" type="text" inputmode="decimal" autocomplete="off" data-unit="'+unit+'" value="'+fmtInput(unit,val)+'">'+post+'</div>';
 }
+var LINKED = {price:1, revenue:1, sde:1, ebitda:1};
 function buildInputs(){
-  var d = defaults(), h = "";
+  var d = defaults(), h = '<div class="linknote" id="linkNote"></div>';
   SECTIONS.forEach(function(sec){
     h += '<div class="sec"><h2>'+sec.t+'</h2>';
     sec.f.forEach(function(f){
@@ -474,7 +479,7 @@ function buildInputs(){
       } else if(unit==="chk"){
         h += '<div class="row"><label for="'+id+'">'+lab+'</label><div class="chk"><input type="checkbox" id="'+id+'"'+(d.v[id]?" checked":"")+'></div></div>';
       } else {
-        h += '<div class="row"><label for="'+id+'">'+lab+hint+'</label>'+cellHTML(id,unit,d.v[id])+'</div>';
+        h += '<div class="row'+(LINKED[id] ? ' lnk' : '')+'"><label for="'+id+'">'+lab+hint+'</label>'+cellHTML(id,unit,d.v[id])+'</div>';
       }
     });
     h += '</div>';
@@ -511,6 +516,7 @@ function readState(){
   SCN.forEach(function(k){ s.sc[k] = {}; SC_FIELDS.forEach(function(f){ s.sc[k][f[0]] = parse(document.getElementById("sc_"+k+"_"+f[0]).value); }); });
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
   s.name = document.getElementById("dealName").value;
+  s.link = {costsActual:link.costsActual, ebitdaEst:link.ebitdaEst, rev:link.rev};
   s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
   s.q.sdeListed = s.q.sde;
   s.q.listing = {text:document.getElementById("lfText").value, facts:listing.facts};
@@ -540,6 +546,7 @@ function writeState(s){
     document.getElementById("th_"+t[0]+"_y").value = pair[1];
   });
   document.getElementById("dealName").value = s.name || "";
+  link = {costsActual:!!(s.link && s.link.costsActual), ebitdaEst:!!(s.link && s.link.ebitdaEst), rev:(s.link && s.link.rev) || 0};
   var q = s.q || {};
   Object.keys(Q_DEFAULT).forEach(function(k){ var val = k==="sde" ? (q.sdeListed != null ? q.sdeListed : q.sde) : q[k]; if(val == null) val = Q_DEFAULT[k]; document.getElementById("q_"+k).value = fmtInput("$", val); });
   QB.forEach(function(b){ var val = q.build && q.build[b[0]] != null ? q.build[b[0]] : b[2]; document.getElementById("qb_"+b[0]).value = fmtInput("$", val); });
@@ -762,6 +769,10 @@ function render(){
 
   renderProj();
   renderScreen(s);
+  document.getElementById("linkNote").innerHTML = '<b>\u21C4 Linked to the Quick screen.</b> Price, revenue, SDE and EBITDA stay in sync both ways'+(s.q.extra > 0 ? '; price includes '+money(s.q.extra)+' of extras' : '')+'.'+
+    (s.q.sdeEst ? '<span>SDE is estimated ('+s.q.sdeMethod.toLowerCase()+').</span>' : '')+
+    (link.ebitdaEst ? '<span>EBITDA is estimated as SDE minus '+money(s.q.ownerComp)+' of owner comp.</span>' : '')+
+    (!link.costsActual ? '<span>Overhead and payroll are scaled estimates; enter actuals when you have them.</span>' : '');
   lsSet(LS_CUR, s);
 }
 
@@ -788,8 +799,6 @@ function screenCalc(s, price){
   // Listing numbers only: no capex, working capital, closing costs or reserve.
   var v = Object.assign({}, s.v, {price:price + (s.q.extra||0), revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
     overhead:0, payroll:0, capex:0, wc:0, closing:0, reserve:0});
-  var lf = s.q.listing && s.q.listing.facts;
-  if(lf && lf.sellerPct > 0) v.sellerPct = lf.sellerPct;
   var R = calc({v:v, sc:{cons:ZERO_SC, base:ZERO_SC, aggr:ZERO_SC}, t:s.t});
   return {R:R, o:R.sc.base};
 }
@@ -834,7 +843,7 @@ function listingChecks(q, v, o){
   if(f.realEstate==="included") C("y","Real estate is in the price", "Split out the property's value: the business alone costs less than the multiple suggests, and SBA lenders finance real estate over 25 years instead of 10.");
   else if(f.realEstate==="available") I("g","Real estate available", "The property can be bought separately, which gives you options on occupancy cost.");
   if(f.ffe > 0) I("g","Hard assets", money(f.ffe)+" of FF&E or equipment gives a lender collateral.", money(f.ffe));
-  if(f.sellerFin) I("g","Seller financing offered", f.sellerPct ? "The listing mentions "+f.sellerPct+"% seller financing, so the screen uses that instead of your default." : "Ask for 10–20% as a seller note; it lowers your cash at close and keeps the seller invested in a smooth handover.", f.sellerPct ? f.sellerPct+"%" : "");
+  if(f.sellerFin) I("g","Seller financing offered", f.sellerPct ? "The listing mentions "+f.sellerPct+"% seller financing, so it's set as your seller note in both screens." : "Ask for 10–20% as a seller note; it lowers your cash at close and keeps the seller invested in a smooth handover.", f.sellerPct ? f.sellerPct+"%" : "");
   if(f.sba) I("g","SBA pre-qualified","A lender has already reviewed the deal, which usually speeds up financing.");
   if(f.owner==="absentee" || f.owner==="semi") I("g", f.owner==="semi" ? "Semi-absentee" : "Absentee owner", "The seller doesn't run it day to day, so SDE may already cover a manager. Confirm who does the work.");
   else if(f.owner==="operator") I("y","Owner-operated", "SDE includes the seller's labor"+(o ? ". If you hire a manager at "+money(v.mgr)+", cash after debt drops to "+money(o.cfm)+"." : "; you'd be buying a job unless you hire a manager."), o ? money(o.cfm) : "");
@@ -856,10 +865,10 @@ function renderChecks(el, checks){
 }
 function renderScreen(s){
   var q = s.q, T = s.t, v = s.v, lf = q.listing && q.listing.facts;
-  var sellerPct = lf && lf.sellerPct > 0 ? lf.sellerPct : v.sellerPct;
+  var sellerPct = v.sellerPct;
   var vEl = document.getElementById("qVerdict"), tEl = document.getElementById("qTiles"), wEl = document.getElementById("qWhy"), gEl = document.getElementById("qTarget");
   document.getElementById("qAssume").innerHTML =
-    '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+sellerPct+'%</b>'+(sellerPct !== v.sellerPct ? ' (from listing)' : '')+' at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
+    '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+sellerPct+'%</b>'+(lf && lf.sellerPct === v.sellerPct ? ' (from listing)' : '')+' at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
     '<li>Bank / SBA at <b>'+v.bankRate+'%</b> / <b>'+v.bankTerm+' yrs</b>, fees <b>'+v.feePct+'%</b>'+(v.feeFin?' rolled in':' paid in cash')+'</li>'+
     (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
     '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>';
@@ -1141,6 +1150,8 @@ function applyListing(f){
   set("q_extra", f.invIncluded === false && f.inventory > 0 ? f.inventory : 0);
   if(f.industry){ document.getElementById("qe_ind").value = f.industry.key; document.getElementById("qe_margin").value = f.industry.margin; }
   if(f.sde > 0){ set("q_sde", f.sde); setSdeMode("listed"); } else setSdeMode("est");
+  if(f.sellerPct > 0) document.getElementById("sellerPct").value = f.sellerPct;
+  if(f.ffe > 0) set("equip", f.ffe);
 }
 function renderFound(){
   var el = document.getElementById("lfFound"), f = listing.facts;
@@ -1157,7 +1168,7 @@ function renderFound(){
   else if(f.invUnits) row(true, "Inventory", f.invUnits+" "+f.invUnitWord, "No dollar value given");
   if(f.ffe) row(true, "FF&E / equipment", money(f.ffe));
   if(f.realEstate) row(true, "Real estate", f.realEstate === "included" ? "Included" : "Available");
-  if(f.sellerFin) row(true, "Seller financing", f.sellerPct ? f.sellerPct+"%" : "Offered", f.sellerPct ? "Replaces your default seller note %" : "");
+  if(f.sellerFin) row(true, "Seller financing", f.sellerPct ? f.sellerPct+"%" : "Offered", f.sellerPct ? "Set as your seller note %" : "");
   if(f.years) row(true, "History", f.years+"+ years");
   if(f.employees) row(true, "Employees", String(f.employees));
   if(f.owner) row(true, "Owner role", {semi:"Semi-absentee", absentee:"Absentee", operator:"Owner-operated"}[f.owner]);
@@ -1204,24 +1215,67 @@ document.getElementById("qe_ind").value = Q2_DEFAULT.ind;
 document.getElementById("qe_margin").value = Q2_DEFAULT.margin;
 buildInputs();
 var saved = lsGet(LS_CUR);
+var link = {costsActual:false, ebitdaEst:false, rev:0};
 if(saved) writeState(saved);
 refreshSaved();
+syncQuickToFull();
 render();
 
-inputsEl.addEventListener("input", render);
+/* ---------- quick screen <-> full underwriting link ---------- */
+var COST_IDS = {overhead:1, payroll:1, payVar:1};
+function setMoneyInput(id, val){
+  var el = document.getElementById(id), nv = fmtInput("$", Math.round(val || 0));
+  if(el.value !== nv && document.activeElement !== el) el.value = nv;
+}
+function syncQuickToFull(){
+  var s = readState(), q = s.q, v = s.v, oldRev = link.rev || v.revenue, newRev = q.revenue;
+  setMoneyInput("price", q.price + (q.extra || 0));
+  setMoneyInput("revenue", newRev);
+  setMoneyInput("sde", q.sde);
+  link.ebitdaEst = !(q.ebitda > 0);
+  setMoneyInput("ebitda", q.ebitda > 0 ? q.ebitda : Math.max(0, q.sde - q.ownerComp));
+  if(!link.costsActual && newRev > 0){
+    // Keep overhead and payroll in proportion to revenue, and below revenue minus SDE
+    // so the full model's cost structure stays possible.
+    var oh = v.overhead, pr = v.payroll, fixedShare = Math.max(0.01, 1 - v.payVar/100);
+    if(oldRev > 0 && oldRev !== newRev){ oh *= newRev/oldRev; pr *= newRev/oldRev; }
+    var room = 0.85*(newRev - q.sde), F = oh + pr*fixedShare;
+    if(room > 0 && F > room){ oh *= room/F; pr *= room/F; }
+    var lf = q.listing && q.listing.facts;
+    if(lf && lf.rent > oh){ oh = lf.rent; if(room > 0 && oh + pr*fixedShare > room) pr = Math.max(0, (room - oh)/fixedShare); }
+    setMoneyInput("overhead", oh); setMoneyInput("payroll", pr);
+  }
+  link.rev = newRev;
+}
+function writeBackToQuick(id){
+  var val = parse(document.getElementById(id).value);
+  var setQ = function(qid, x){ document.getElementById(qid).value = fmtInput("$", x); };
+  if(id === "price") setQ("q_price", Math.max(0, val - parse(document.getElementById("q_extra").value)));
+  else if(id === "revenue") setQ("q_revenue", val);
+  else if(id === "sde"){ setQ("q_sde", val); setSdeMode("listed"); }
+  else if(id === "ebitda") setQ("q_ebitda", val);
+}
+function loadState(st){ writeState(st); syncQuickToFull(); render(); }
+
+inputsEl.addEventListener("input", function(e){
+  var id = e.target.id;
+  if(LINKED[id]){ writeBackToQuick(id); syncQuickToFull(); }
+  if(COST_IDS[id]) link.costsActual = true;
+  render();
+});
 var qEl = document.getElementById("viewScreen");
-qEl.addEventListener("input", function(e){ if(e.target.classList.contains("q")) render(); });
+qEl.addEventListener("input", function(e){ if(e.target.classList.contains("q")){ syncQuickToFull(); render(); } });
 document.getElementById("qe_ind").addEventListener("change", function(){
   var ind = INDUSTRIES.filter(function(x){ return x[0]===this.value; }, this)[0];
   if(ind && ind[2] != null) document.getElementById("qe_margin").value = ind[2];
-  render();
+  syncQuickToFull(); render();
 });
 document.getElementById("qe_margin").addEventListener("input", function(){ document.getElementById("qe_ind").value = "custom"; });
 function readListing(){
   var txt = document.getElementById("lfText").value;
   if(!txt.trim()){ toast("Paste a listing first"); return; }
   listing = {text:txt, facts:parseListing(txt)};
-  applyListing(listing.facts); renderFound(); render();
+  applyListing(listing.facts); renderFound(); syncQuickToFull(); render();
   var f = listing.facts, n = ["price","sde","revenue","ebitda"].filter(function(k){ return f[k] > 0; }).length;
   toast("Read "+n+" of 4 key figures");
 }
@@ -1230,7 +1284,7 @@ document.getElementById("lfText").addEventListener("paste", function(){ setTimeo
 document.getElementById("lfClear").addEventListener("click", function(){
   listing = {text:"", facts:null}; document.getElementById("lfText").value = ""; renderFound(); render(); toast("Listing cleared");
 });
-document.getElementById("sdeTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b){ setSdeMode(b.dataset.m); render(); } });
+document.getElementById("sdeTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b){ setSdeMode(b.dataset.m); syncQuickToFull(); render(); } });
 [inputsEl, qEl].forEach(function(root){
 inputsEl.addEventListener("change", render);
   root.addEventListener("focusin", function(e){
@@ -1252,18 +1306,7 @@ setView(location.hash === "#full" ? "full" : location.hash === "#screen" ? "scre
 document.getElementById("btnEditTerms").addEventListener("click", function(){
   setView("full"); document.getElementById("thSec").open = true; document.getElementById("downPct").focus();
 });
-document.getElementById("btnSend").addEventListener("click", function(){
-  var s = readState(), q = s.q, oldRev = s.v.revenue;
-  var set = function(id, val){ document.getElementById(id).value = fmtInput("$", val); };
-  set("price", q.price + (q.extra || 0)); set("revenue", q.revenue); set("sde", q.sde);
-  var lf = q.listing && q.listing.facts;
-  if(lf && lf.sellerPct > 0) document.getElementById("sellerPct").value = lf.sellerPct;
-  if(lf && lf.ffe > 0) set("equip", lf.ffe);
-  set("ebitda", q.ebitda > 0 ? q.ebitda : Math.max(0, q.sde - s.v.mgr));
-  if(oldRev > 0){ var k = q.revenue/oldRev; set("overhead", s.v.overhead*k); set("payroll", s.v.payroll*k); }
-  render(); setView("full"); document.getElementById("overhead").focus();
-  toast("Listing copied. Overhead & payroll were scaled; replace with actuals");
-});
+document.getElementById("btnSend").addEventListener("click", function(){ setView("full"); window.scrollTo(0, 0); });
 document.getElementById("dealName").addEventListener("input", function(){ if(last){ last.s.name = this.value; lsSet(LS_CUR, readState()); } });
 
 document.getElementById("projTabs").addEventListener("click", function(e){
@@ -1281,7 +1324,7 @@ document.getElementById("btnSave").addEventListener("click", function(){
 });
 document.getElementById("savedSel").addEventListener("change", function(){
   var deals = lsGet(LS_DEALS) || {}, d = deals[this.value];
-  if(d){ writeState(d); render(); toast("Loaded"); }
+  if(d){ loadState(d); toast("Loaded"); }
 });
 var delArmed = false;
 document.getElementById("btnDelete").addEventListener("click", function(){
@@ -1291,7 +1334,7 @@ document.getElementById("btnDelete").addEventListener("click", function(){
   delArmed = false; this.textContent = "Delete";
   var deals = lsGet(LS_DEALS) || {}; delete deals[name]; lsSet(LS_DEALS, deals); refreshSaved(); toast("Deleted");
 });
-document.getElementById("btnReset").addEventListener("click", function(){ writeState(defaults()); render(); toast("Example loaded"); });
+document.getElementById("btnReset").addEventListener("click", function(){ loadState(defaults()); toast("Example loaded"); });
 document.getElementById("btnCopy").addEventListener("click", function(){
   var txt = summaryText();
   var p = navigator.clipboard && navigator.clipboard.writeText ? navigator.clipboard.writeText(txt) : Promise.reject();
