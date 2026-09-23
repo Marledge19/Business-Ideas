@@ -1,3 +1,4 @@
+<meta charset="utf-8">
 <title>Main Street Deal Calculator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -33,6 +34,7 @@
   --base-col:#1B2230;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 body{background:var(--ground);color:var(--ink);font:14px/1.45 var(--sans);margin:0}
 .app{max-width:1480px;margin:0 auto;padding-inline:16px;padding-block:14px 56px}
 .num,input.v,td.n,th.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
@@ -143,12 +145,48 @@ table.proj td.n{min-width:88px}
 .foot{font-size:11.5px;color:var(--faint);padding:8px 14px 12px;line-height:1.5;max-width:90ch}
 .legend{font:500 11px var(--sans);text-transform:none;letter-spacing:0;color:var(--faint)}
 .legend b{color:var(--input);font-family:var(--mono);font-weight:500}
+/* view switch */
+.views{display:inline-flex;border:1px solid var(--line-strong);border-radius:5px;overflow:hidden}
+.views button{border:0;border-radius:0;padding:7px 14px;font-size:13px;background:var(--panel);color:var(--muted)}
+.views button + button{border-left:1px solid var(--line-strong)}
+.views button[aria-pressed="true"]{background:var(--ink);color:var(--panel)}
+
+/* quick screen */
+.qgrid{display:grid;grid-template-columns:minmax(300px,370px) minmax(0,1fr);gap:20px;align-items:start}
+@media (max-width:960px){.qgrid{grid-template-columns:minmax(0,1fr)}}
+.qin .row{padding-block:6px}
+.qin input.v{font-size:15px;padding-block:7px}
+.assume{list-style:none;margin:0;padding:8px 12px 4px;display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted)}
+.assume b{font-family:var(--mono);font-weight:500;color:var(--ink)}
+.qactions{display:flex;flex-wrap:wrap;gap:6px;padding:8px 12px 12px}
+.verdict{display:flex;flex-direction:column;gap:6px;padding:18px 18px 16px;border-radius:6px;border:1.5px solid var(--line-strong);background:var(--panel)}
+.verdict .lab{font:600 11px var(--narrow);text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+.verdict .word{font:700 clamp(28px,4vw,40px)/1.05 var(--sans);letter-spacing:-.02em}
+.verdict p{margin:0;font-size:14px;max-width:70ch}
+.verdict.g{border-color:var(--g);background:var(--g-bg)}.verdict.g .word{color:var(--g)}
+.verdict.y{border-color:var(--y);background:var(--y-bg)}.verdict.y .word{color:var(--y)}
+.verdict.r{border-color:var(--r);background:var(--r-bg)}.verdict.r .word{color:var(--r)}
+.why{list-style:none;margin:0;padding:6px 0}
+.why li{display:grid;grid-template-columns:62px minmax(0,1fr) auto;gap:4px 12px;align-items:baseline;padding:8px 14px;border-bottom:1px solid var(--line)}
+.why li:last-child{border-bottom:0}
+.why .pill{justify-self:start}
+.why .t{font-size:13.5px}
+.why .t small{display:block;color:var(--muted);font-size:12px;margin-top:1px}
+.why .m{font:600 13px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.why .m.g{color:var(--g)}.why .m.y{color:var(--y)}.why .m.r{color:var(--r)}
+@media (max-width:520px){.why li{grid-template-columns:56px minmax(0,1fr)}.why .m{grid-column:2}}
+.target{padding:10px 14px;border-top:1px solid var(--line-strong);background:var(--panel-2);font-size:13px;border-radius:0 0 6px 6px}
+.target b{font-family:var(--mono)}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
 
 <div class="app">
   <header class="top">
     <h1>Main Street Deal Calculator<small>Small-business acquisition underwriting</small></h1>
+    <div class="views" id="viewTabs" role="group" aria-label="View">
+      <button type="button" data-view="screen" aria-pressed="true">Quick screen</button>
+      <button type="button" data-view="full" aria-pressed="false">Full underwriting</button>
+    </div>
     <div class="toolbar">
       <input id="dealName" type="text" aria-label="Deal name" placeholder="Deal name">
       <button id="btnSave" class="primary" type="button">Save deal</button>
@@ -160,7 +198,34 @@ table.proj td.n{min-width:88px}
     </div>
   </header>
 
-  <div class="grid">
+  <div class="qgrid" id="viewScreen">
+    <aside class="inputs qin" aria-label="Quick screen inputs">
+      <div class="sec"><h2>From the listing</h2>
+        <div class="row"><label for="q_price">Asking price</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_price" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="850,000"></div></div>
+        <div class="row"><label for="q_sde">Annual cash flow (SDE)<i>Seller's discretionary earnings</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_sde" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="280,000"></div></div>
+        <div class="row"><label for="q_revenue">Gross revenue</label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_revenue" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="1,300,000"></div></div>
+        <div class="row"><label for="q_ebitda">EBITDA<i>Optional; leave 0 if not listed</i></label><div class="cell"><span class="u pre">$</span><input class="v q" id="q_ebitda" type="text" inputmode="decimal" autocomplete="off" data-unit="$" value="200,000"></div></div>
+      </div>
+      <div class="sec"><h2>Assumed financing</h2>
+        <ul class="assume" id="qAssume"></ul>
+        <div class="qactions">
+          <button type="button" id="btnEditTerms">Edit terms &amp; thresholds</button>
+          <button type="button" id="btnSend" class="primary">Underwrite in full</button>
+        </div>
+      </div>
+    </aside>
+    <div class="results">
+      <div class="verdict" id="qVerdict" aria-live="polite"></div>
+      <div class="tiles" id="qTiles"></div>
+      <section class="panel">
+        <h3>Why</h3>
+        <ul class="why" id="qWhy"></ul>
+        <div class="target" id="qTarget"></div>
+      </section>
+    </div>
+  </div>
+
+  <div class="grid" id="viewFull" hidden>
     <aside class="inputs" id="inputs" aria-label="Deal inputs"></aside>
 
     <main class="results">
@@ -264,8 +329,11 @@ var THRESH = [
   ["ebitdaMult","Price / EBITDA","x",4.5,6.0,"max"],
   ["roiM","Cash-on-cash w/ manager","%",20,10,"min"],
   ["payback","Payback","yrs",4,6,"max"],
-  ["cushion","Revenue cushion to break-even","%",20,10,"min"]
+  ["cushion","Revenue cushion to break-even","%",20,10,"min"],
+  ["margin","SDE margin (quick screen)","%",20,10,"min"],
+  ["sdeDrop","SDE drop before DSCR hits floor (quick screen)","%",30,15,"min"]
 ];
+var Q_DEFAULT = {price:850000, sde:280000, revenue:1300000, ebitda:200000};
 
 function defaults(){
   var s = {v:{}, sc:{}, t:{}};
@@ -345,6 +413,7 @@ function readState(){
   SCN.forEach(function(k){ s.sc[k] = {}; SC_FIELDS.forEach(function(f){ s.sc[k][f[0]] = parse(document.getElementById("sc_"+k+"_"+f[0]).value); }); });
   THRESH.forEach(function(t){ s.t[t[0]] = [parse(document.getElementById("th_"+t[0]+"_g").value), parse(document.getElementById("th_"+t[0]+"_y").value)]; });
   s.name = document.getElementById("dealName").value;
+  s.q = {}; Object.keys(Q_DEFAULT).forEach(function(k){ s.q[k] = parse(document.getElementById("q_"+k).value); });
   return s;
 }
 function writeState(s){
@@ -365,6 +434,7 @@ function writeState(s){
     document.getElementById("th_"+t[0]+"_y").value = pair[1];
   });
   document.getElementById("dealName").value = s.name || "";
+  Object.keys(Q_DEFAULT).forEach(function(k){ var val = s.q && s.q[k] != null ? s.q[k] : Q_DEFAULT[k]; document.getElementById("q_"+k).value = fmtInput("$", val); });
 }
 
 /* ---------- math ---------- */
@@ -575,6 +645,7 @@ function render(){
   document.getElementById("scTable").innerHTML = h;
 
   renderProj();
+  renderScreen(s);
   lsSet(LS_CUR, s);
 }
 
@@ -595,6 +666,121 @@ function renderProj(){
   document.getElementById("projTable").innerHTML = h;
 }
 
+/* ---------- quick screen ---------- */
+var ZERO_SC = {revChg:0, cmChg:0, growth:0, rateChg:0};
+function screenCalc(s, price){
+  // Listing numbers only: no capex, working capital, closing costs or reserve.
+  var v = Object.assign({}, s.v, {price:price, revenue:s.q.revenue, sde:s.q.sde, ebitda:s.q.ebitda > 0 ? s.q.ebitda : s.q.sde,
+    overhead:0, payroll:0, capex:0, wc:0, closing:0, reserve:0});
+  var R = calc({v:v, sc:{cons:ZERO_SC, base:ZERO_SC, aggr:ZERO_SC}, t:s.t});
+  return {R:R, o:R.sc.base};
+}
+function greenPrice(s){
+  var T = s.t, q = s.q;
+  function ok(p){ var o = screenCalc(s, p).o;
+    return o.dscr >= T.dscr[0] && o.cfCush >= T.cfCush[0] && p/q.sde <= T.sdeMult[0] && (!(q.ebitda > 0) || p/q.ebitda <= T.ebitdaMult[0]); }
+  var lo = 0, hi = Math.max(q.price, q.sde*20);
+  if(!ok(1)) return 0;
+  for(var i=0; i<50; i++){ var mid = (lo+hi)/2; if(ok(mid)) lo = mid; else hi = mid; }
+  return Math.floor(lo/1000)*1000;
+}
+function renderScreen(s){
+  var q = s.q, T = s.t, v = s.v;
+  var vEl = document.getElementById("qVerdict"), tEl = document.getElementById("qTiles"), wEl = document.getElementById("qWhy"), gEl = document.getElementById("qTarget");
+  document.getElementById("qAssume").innerHTML =
+    '<li>Down payment <b>'+v.downPct+'%</b> &middot; seller note <b>'+v.sellerPct+'%</b> at <b>'+v.sellerRate+'%</b> / <b>'+v.sellerTerm+' yrs</b></li>'+
+    '<li>Bank / SBA at <b>'+v.bankRate+'%</b> / <b>'+v.bankTerm+' yrs</b>, fees <b>'+v.feePct+'%</b>'+(v.feeFin?' rolled in':' paid in cash')+'</li>'+
+    (v.otherAmt>0 ? '<li>Other note <b>'+money(v.otherAmt)+'</b> at <b>'+v.otherRate+'%</b></li>' : '')+
+    '<li>Minimum draw you need <b>'+money(v.ownerDraw)+'</b></li>';
+  last.screen = null;
+
+  if(!(q.price > 0 && q.sde > 0 && q.revenue > 0)){
+    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Enter the listing</span><p>Asking price, cash flow and revenue are all needed for a verdict.</p>';
+    tEl.innerHTML = ""; wEl.innerHTML = ""; gEl.innerHTML = ""; return;
+  }
+  var X = screenCalc(s, q.price), o = X.o, R = X.R;
+  var sdeMult = q.price/q.sde, ebMult = q.ebitda > 0 ? q.price/q.ebitda : NaN;
+  var margin = q.sde/q.revenue*100;
+  var drop = o.ds > 0 ? (1 - T.dscr[1]*o.ds/q.sde)*100 : 100;
+  var checks = [], dataErr = false;
+
+  if(q.sde >= q.revenue) dataErr = true;
+  if(q.ebitda > q.sde) checks.push({c:"y", t:"EBITDA is above SDE", d:"SDE normally equals EBITDA plus the owner's pay, so this listing may be mislabeled. Ask the broker.", m:""});
+
+  var c;
+  c = rag("sdeMult", sdeMult, T);
+  checks.push({c:c, t:"Price vs. cash flow", m:mult(sdeMult)+" SDE",
+    d: c==="g" ? "At or under "+T.sdeMult[0]+"x SDE, which is a fair-to-cheap price for a Main Street business."
+     : c==="y" ? "Between "+T.sdeMult[0]+"x and "+T.sdeMult[1]+"x SDE: a full price. The quality of the earnings has to justify it."
+     : "Above "+T.sdeMult[1]+"x SDE, rich for a small business. Expect to negotiate hard or walk away."});
+  if(q.ebitda > 0){
+    c = rag("ebitdaMult", ebMult, T);
+    checks.push({c:c, t:"Price vs. EBITDA", m:mult(ebMult)+" EBITDA",
+      d: c==="g" ? "Reasonable once the owner's pay is replaced." : c==="y" ? "A full multiple on earnings after a market-rate owner salary." : "Expensive once you pay someone market rate to run it."});
+  }
+  var dscrC = rag("dscr", o.dscr, T);
+  checks.push({c:dscrC, t:"Can it carry the debt?", m:dscrF(o.dscr)+" DSCR",
+    d: "Debt service is "+money(o.ds)+"/yr ("+money(o.mo)+"/mo) at asking price. "+
+      (dscrC==="g" ? "Cash flow covers it comfortably." : dscrC==="y" ? "Enough to get a loan, but little room for a bad year." : "Below the "+T.dscr[1]+"x most SBA lenders require, so this likely won't be financed at this price.")});
+  var payC = rag("cfCush", o.cfCush, T);
+  checks.push({c:payC, t:"Does it pay you?", m:money(o.cfad),
+    d: o.overDraw >= 0 ? "Cash left after debt is "+money(o.overDraw)+" more than the "+money(v.ownerDraw)+" you need to live on."
+      : "Cash left after debt is "+money(-o.overDraw)+" less than the "+money(v.ownerDraw)+" you need to live on."});
+  c = rag("sdeDrop", drop, T);
+  checks.push({c:c, t:"How much can go wrong?", m:(drop > 0 ? pct(drop,0) : "0%")+" drop",
+    d: drop > 0 ? "Cash flow can fall "+pct(drop,0)+" before DSCR drops below the "+T.dscr[1]+"x lender floor." : "It is already below the lender floor, with no margin for error."});
+  c = rag("margin", margin, T);
+  checks.push({c:c, t:"Is it a healthy business?", m:pct(margin)+" margin",
+    d: c==="g" ? "Cash flow is a healthy share of revenue, which usually means pricing power or a lean cost structure."
+     : c==="y" ? "Moderate margin. Normal in some industries (distribution, restaurants, construction), but a small revenue dip hurts."
+     : "Thin margin: a small drop in sales or rise in costs can wipe out cash flow."});
+
+  var reds = checks.filter(function(x){return x.c==="r";}).length, yellows = checks.filter(function(x){return x.c==="y";}).length;
+  var verdict, why;
+  if(dataErr){
+    vEl.className = "verdict"; vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">Check the numbers</span><p>Cash flow can\'t be equal to or above revenue. Fix the listing figures and the verdict will appear.</p>';
+    tEl.innerHTML = ""; gEl.innerHTML = "";
+    wEl.innerHTML = '<li><span class="pill r">Red</span><span class="t">Numbers don\'t add up<small>Cash flow is '+money(q.sde)+' on revenue of '+money(q.revenue)+'. Usually a missing or extra zero.</small></span><span class="m"></span></li>';
+    return;
+  }
+  if(dscrC==="r" || payC==="r" || reds >= 2){
+    verdict = "r";
+    var bits = [];
+    if(dscrC==="r") bits.push("cash flow doesn't cover the debt a bank would require at this price");
+    if(payC==="r") bits.push("after debt payments it doesn't leave enough to pay you");
+    if(!bits.length) bits.push(reds+" of the checks below are red");
+    why = "At asking price, " + bits.join(", and ") + ".";
+  } else if(reds===0 && yellows<=1 && dscrC==="g" && payC==="g"){
+    verdict = "g"; why = "Price, debt coverage and your take-home all clear the bar. Worth requesting financials to verify the cash flow is real.";
+  } else {
+    verdict = "y";
+    var weak = checks.filter(function(x){return x.c!=="g";}).map(function(x){return x.t.replace(/\?$/,"").toLowerCase();});
+    why = "Nothing rules it out, but it misses a green light on: "+weak.join("; ")+". Dig into these before spending money on diligence.";
+  }
+  var WORD = {g:"Great Deal", y:"Research Deeper", r:"Not Worthwhile"};
+  vEl.className = "verdict "+verdict;
+  vEl.innerHTML = '<span class="lab">Verdict</span><span class="word">'+WORD[verdict]+'</span><p>'+why+'</p>';
+  last.screen = {verdict:WORD[verdict], why:why};
+
+  tEl.innerHTML = [
+    ["Multiple", mult(sdeMult), "of SDE", rag("sdeMult",sdeMult,T)],
+    ["DSCR", dscrF(o.dscr), money(o.ds)+" / yr debt", dscrC],
+    ["Cash after debt", money(o.cfad), "before your pay & taxes", payC],
+    ["Down payment", money(R.cash), "plus closing costs & working capital", ""]
+  ].map(function(t){ return '<div class="tile '+t[3]+'"><div class="k">'+t[0]+'</div><div class="val">'+t[1]+'</div><div class="sub">'+t[2]+'</div></div>'; }).join("");
+
+  var order = {r:0,y:1,g:2};
+  checks.sort(function(a,b){ return order[a.c]-order[b.c]; });
+  wEl.innerHTML = checks.map(function(x){
+    return '<li><span class="pill '+x.c+'">'+(x.c==="r"?"Red":x.c==="y"?"Watch":"Good")+'</span><span class="t">'+x.t+'<small>'+x.d+'</small></span><span class="m '+x.c+'">'+x.m+'</span></li>';
+  }).join("");
+
+  var gp = greenPrice(s);
+  gEl.innerHTML = !gp ? "No price gets every check to green with this cash flow and these terms."
+    : gp >= q.price ? "Asking price is within the green range. Every check stays green up to about <b>"+money(gp)+"</b>."
+    : "Offer to aim for: about <b>"+money(gp)+"</b> ("+pct((1-gp/q.price)*100,0)+" below asking). That's the highest price where the multiple, DSCR and your take-home all turn green.";
+}
+
 function worst(arr){ return arr.indexOf("r")>=0 ? "r" : arr.indexOf("y")>=0 ? "y" : "g"; }
 
 /* ---------- saved deals ---------- */
@@ -610,7 +796,8 @@ function toast(msg){ var t = document.getElementById("toast"); t.textContent = m
 
 function summaryText(){
   var s = last.s, R = last.R, v = s.v, lines = [];
-  lines.push((s.name || "Deal") + " — underwriting summary");
+  lines.push((s.name || "Deal") + " \u2014 underwriting summary");
+  if(last.screen) lines.push("Quick screen (listing " + money(s.q.price) + " / SDE " + money(s.q.sde) + "): " + last.screen.verdict + " \u2014 " + last.screen.why);
   lines.push("Price " + money(v.price) + " | " + mult(R.ttm.sdeMult) + " SDE | " + mult(R.ttm.ebitdaMult) + " EBITDA | " + mult(R.ttm.revMult) + " revenue");
   lines.push("Cash at close " + money(R.cash) + " | Bank " + money(R.bank) + " @ " + v.bankRate + "%/" + v.bankTerm + "y | Seller " + money(R.seller) + " @ " + v.sellerRate + "%/" + v.sellerTerm + "y" + (R.other>0 ? " | Other " + money(R.other) : ""));
   SCN.forEach(function(k){ var o = R.sc[k];
@@ -628,12 +815,37 @@ refreshSaved();
 render();
 
 inputsEl.addEventListener("input", render);
+var qEl = document.getElementById("viewScreen");
+qEl.addEventListener("input", function(e){ if(e.target.classList.contains("q")) render(); });
+[inputsEl, qEl].forEach(function(root){
 inputsEl.addEventListener("change", render);
-inputsEl.addEventListener("focusin", function(e){
+  root.addEventListener("focusin", function(e){
   var el = e.target; if(el.classList && el.classList.contains("v") && el.dataset.unit==="$"){ el.value = String(parse(el.value)); try{ el.select(); }catch(_){} }
 });
-inputsEl.addEventListener("focusout", function(e){
+  root.addEventListener("focusout", function(e){
   var el = e.target; if(el.classList && el.classList.contains("v")){ el.value = fmtInput(el.dataset.unit||"", parse(el.value)); }
+  });
+});
+
+function setView(view, noSave){
+  document.getElementById("viewScreen").hidden = view !== "screen";
+  document.getElementById("viewFull").hidden = view !== "full";
+  Array.prototype.forEach.call(document.querySelectorAll("#viewTabs button"), function(b){ b.setAttribute("aria-pressed", b.dataset.view===view ? "true" : "false"); });
+  if(!noSave) lsSet("msdc.view", view);
+}
+document.getElementById("viewTabs").addEventListener("click", function(e){ var b = e.target.closest("button"); if(b) setView(b.dataset.view); });
+setView(location.hash === "#full" ? "full" : location.hash === "#screen" ? "screen" : (lsGet("msdc.view") || "screen"), true);
+document.getElementById("btnEditTerms").addEventListener("click", function(){
+  setView("full"); document.getElementById("thSec").open = true; document.getElementById("downPct").focus();
+});
+document.getElementById("btnSend").addEventListener("click", function(){
+  var s = readState(), q = s.q, oldRev = s.v.revenue;
+  var set = function(id, val){ document.getElementById(id).value = fmtInput("$", val); };
+  set("price", q.price); set("revenue", q.revenue); set("sde", q.sde);
+  set("ebitda", q.ebitda > 0 ? q.ebitda : Math.max(0, q.sde - s.v.mgr));
+  if(oldRev > 0){ var k = q.revenue/oldRev; set("overhead", s.v.overhead*k); set("payroll", s.v.payroll*k); }
+  render(); setView("full"); document.getElementById("overhead").focus();
+  toast("Listing copied. Overhead & payroll were scaled; replace with actuals");
 });
 document.getElementById("dealName").addEventListener("input", function(){ if(last){ last.s.name = this.value; lsSet(LS_CUR, readState()); } });
 
