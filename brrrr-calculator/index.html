@@ -267,25 +267,25 @@ const RESEARCHED = 'Sep 24, 2026';
 const ITEMS = [['roof','Roof'],['hvac','HVAC'],['plumb','Plumbing'],['elec','Electrical'],['kitchen','Kitchen'],['baths','Baths'],['floor','Flooring'],['paint','Paint'],['ext','Exterior / landscaping'],['struct','Foundation / structural'],['permits','Permits'],['other','Other']];
 // mills = total 2025 millage; basis: reported | derived | estimate; rf = rent factor vs HUD metro FMR; ins = homeowner premium per $1,000 of dwelling value
 const AREAS = [
-  {id:'bham',  name:'Birmingham (city)',     county:'Jefferson', mills:72.5, basis:'derived',  rf:0.95, ins:9.0},
-  {id:'truss', name:'Trussville',            county:'Jefferson', mills:62.1, basis:'reported', rf:1.10, ins:7.8},
-  {id:'leeds', name:'Leeds',                 county:'Jefferson', mills:60.0, basis:'estimate', rf:0.95, ins:8.2},
-  {id:'iron',  name:'Irondale',              county:'Jefferson', mills:62.6, basis:'derived',  rf:0.97, ins:8.4},
-  {id:'cp',    name:'Center Point',          county:'Jefferson', mills:50.1, basis:'estimate', rf:0.90, ins:8.8},
-  {id:'fult',  name:'Fultondale',            county:'Jefferson', mills:55.1, basis:'derived',  rf:0.97, ins:8.2},
-  {id:'gard',  name:'Gardendale',            county:'Jefferson', mills:60.1, basis:'reported', rf:1.00, ins:8.0},
-  {id:'bess',  name:'Bessemer',              county:'Jefferson', mills:68.7, basis:'reported', rf:0.85, ins:9.2},
-  {id:'home',  name:'Homewood',              county:'Jefferson', mills:75.0, basis:'reported', rf:1.25, ins:8.0},
-  {id:'vest',  name:'Vestavia Hills',        county:'Jefferson', mills:92.6, basis:'reported', rf:1.30, ins:7.8},
-  {id:'hoovj', name:'Hoover (Jefferson Co.)',county:'Jefferson', mills:72.6, basis:'reported', rf:1.18, ins:7.8},
-  {id:'hoovs', name:'Hoover (Shelby Co.)',   county:'Shelby',    mills:66.5, basis:'derived',  rf:1.18, ins:7.8},
-  {id:'pel',   name:'Pelham',                county:'Shelby',    mills:58.0, basis:'derived',  rf:1.08, ins:7.8},
-  {id:'alab',  name:'Alabaster',             county:'Shelby',    mills:54.0, basis:'derived',  rf:1.05, ins:7.8},
-  {id:'chel',  name:'Chelsea',               county:'Shelby',    mills:44.0, basis:'derived',  rf:1.10, ins:7.6},
-  {id:'other', name:'Other (manual)',        county:'—',         mills:60.0, basis:'placeholder', rf:1.00, ins:8.5}
+  {id:'bham',  name:'Birmingham (city)',     county:'Jefferson', mills:72.5, basis:'derived',  rf:0.95, ins:7.6},
+  {id:'truss', name:'Trussville',            county:'Jefferson', mills:62.1, basis:'reported', rf:1.10, ins:6.6},
+  {id:'leeds', name:'Leeds',                 county:'Jefferson', mills:60.0, basis:'estimate', rf:0.95, ins:7.0},
+  {id:'iron',  name:'Irondale',              county:'Jefferson', mills:62.6, basis:'derived',  rf:0.97, ins:7.1},
+  {id:'cp',    name:'Center Point',          county:'Jefferson', mills:50.1, basis:'estimate', rf:0.90, ins:7.5},
+  {id:'fult',  name:'Fultondale',            county:'Jefferson', mills:55.1, basis:'derived',  rf:0.97, ins:7.0},
+  {id:'gard',  name:'Gardendale',            county:'Jefferson', mills:60.1, basis:'reported', rf:1.00, ins:6.8},
+  {id:'bess',  name:'Bessemer',              county:'Jefferson', mills:68.7, basis:'reported', rf:0.85, ins:7.8},
+  {id:'home',  name:'Homewood',              county:'Jefferson', mills:75.0, basis:'reported', rf:1.25, ins:6.8},
+  {id:'vest',  name:'Vestavia Hills',        county:'Jefferson', mills:92.6, basis:'reported', rf:1.30, ins:6.6},
+  {id:'hoovj', name:'Hoover (Jefferson Co.)',county:'Jefferson', mills:72.6, basis:'reported', rf:1.18, ins:6.6},
+  {id:'hoovs', name:'Hoover (Shelby Co.)',   county:'Shelby',    mills:66.5, basis:'derived',  rf:1.18, ins:6.6},
+  {id:'pel',   name:'Pelham',                county:'Shelby',    mills:58.0, basis:'derived',  rf:1.08, ins:6.6},
+  {id:'alab',  name:'Alabaster',             county:'Shelby',    mills:54.0, basis:'derived',  rf:1.05, ins:6.6},
+  {id:'chel',  name:'Chelsea',               county:'Shelby',    mills:44.0, basis:'derived',  rf:1.10, ins:6.5},
+  {id:'other', name:'Other (manual)',        county:'—',         mills:60.0, basis:'placeholder', rf:1.00, ins:7.2}
 ];
 const FMR = {2:1266, 3:1583, 4:1801};      // HUD FY2026 Fair Market Rent, Birmingham-Hoover HMFA
-const LL_MULT = 1.10;                      // landlord (DP-3) premium vs homeowner (HO-3), same dwelling
+const LL_MULT = 1.00;                      // landlord (DP-3) vs homeowner (HO-3): no contents cover offsets the rental surcharge
 const ROOM_PREMIUM = 1.15;                 // per-room rent vs. whole-house rent / bedrooms
 const CLASS_II = 0.20, CLASS_III = 0.10;   // Alabama assessment ratios
 
@@ -335,7 +335,7 @@ function calc(s){
 
 function cocOf(cf,cashLeft){ return cashLeft>0 ? cf*12/cashLeft*100 : (cf>0?Infinity:(cf<0?-Infinity:0)); }
 function cocPass(cf,cashLeft,t){ return cashLeft>0 ? cf*12/cashLeft*100 >= t : cf>0; }
-function dscrOf(noi,ds){ return ds>0 ? noi/ds : (noi>0?Infinity:0); }
+function dscrOf(rent,pitia){ return pitia>0 ? rent/pitia : (rent>0?Infinity:0); }   // how DSCR lenders measure it
 
 function calcB(s,R,insLL){
   const {P,ARV,auto:A} = R;
@@ -362,7 +362,7 @@ function calcB(s,R,insLL){
   const rr = fin(s.refiRate)/1200, rn = Math.round(fin(s.refiTerm)*12);
   const ds = pmt(rr,rn,newLoan);
   const noi = R.ops.noi, cf = noi - ds;
-  const dscr = dscrOf(noi,ds), coc = cocOf(cf,cashLeft);
+  const dscr = dscrOf(R.ops.rent, ds + R.ops.tax + R.ops.ins + R.ops.other), coc = cocOf(cf,cashLeft);
   const allIn = P + closeP + R.rehab + holdingCost;
   Object.assign(R,{closeP,cash,loan,down,pi,m,hTax,hIns,hUtil,hLoan,hInt,holding,holdingCost,cashIn,refiMonth,payoff,newLoan,refiClose,cashOut,cashLeft,ds,noi,cf,dscr,coc,allIn,
     allInPct: ARV>0 ? allIn/ARV*100 : NaN, equity: ARV-allIn, equityAfter: ARV-newLoan,
@@ -370,8 +370,8 @@ function calcB(s,R,insLL){
     breakEvenRent: R.ops.k>0 ? (R.ops.fixed+ds)/R.ops.k : NaN});
   const t70 = fin(s.rule70)/100*ARV;
   R.tests = [
-    {id:'r70', name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70,
-      detail:`Purchase + rehab ${$(P+R.rehab)} vs. limit ${$(t70)} (${fin(s.rule70)}% of ARV)`,
+    {id:'r70', name:`${fin(s.rule70)}% rule`, pass: P+R.rehabBase <= t70,
+      detail:`Purchase + rehab ${$(P+R.rehabBase)} vs. limit ${$(t70)} (${fin(s.rule70)}% of ARV; rehab before contingency)`,
       fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)],['arv','min','ARV needed to pass']]},
     {id:'cash', name:'Cash left in deal', pass: cashLeft <= fin(s.maxCashLeft),
       detail:`${$(cashLeft)} left in vs. target ≤ ${$(fin(s.maxCashLeft))}`,
@@ -410,7 +410,7 @@ function calcHH(s,R,insHO){
   const housing = ownerCost - roomIncome - utilShare;
   const cashIn = down + closeP + R.rehab;
   const ds = pi + pmiMo, noi = R.ops.noi, cf = noi - ds;
-  const dscr = dscrOf(noi,ds), coc = cocOf(cf,cashIn);
+  const dscr = dscrOf(R.ops.rent, ds + R.ops.tax + R.ops.ins + R.ops.other), coc = cocOf(cf,cashIn);
   const allIn = P + closeP + R.rehab;
   Object.assign(R,{closeP,loan,down,pi,pmiMo,hTax,hIns,roomRent,rooms,myRooms,roomIncome,util,utilShare,hhRes,hOther,ownerCost,housing,cashIn,cashLeft:cashIn,ds,noi,cf,dscr,coc,allIn,
     allInPct: ARV>0 ? allIn/ARV*100 : NaN, equity: ARV-allIn, equityAfter: ARV-loan, roomsOk: rooms+myRooms <= R.beds,
@@ -431,7 +431,7 @@ function calcHH(s,R,insHO){
   ];
   // investor yardsticks: shown for reference, not part of the house-hack verdict
   R.info = [
-    {name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70, detail:`Purchase + repairs ${$(P+R.rehab)} vs. ${$(t70)}`},
+    {name:`${fin(s.rule70)}% rule`, pass: P+R.rehabBase <= t70, detail:`Purchase + repairs ${$(P+R.rehabBase)} vs. ${$(t70)}`},
     {name:'DSCR after move-out', pass: dscr >= fin(s.minDSCR), detail:`${x2(dscr)} vs. ${x2(fin(s.minDSCR))}`},
     {name:'Cash-on-cash after move-out', pass: cocPass(cf,cashIn,fin(s.minCoC)), detail:`${pct(coc)} vs. ${pct(fin(s.minCoC))}`}
   ];
@@ -926,14 +926,14 @@ document.getElementById('area').innerHTML = AREAS.map(a=>`<option value="${a.id}
 /* ---------- defaults & sample ---------- */
 const DEFAULTS = {
   mode:'brrrr', area:'bham', beds:'3', price:'', arv:'', rehabMode:'lump', rehabLump:'', contPct:'10',
-  finMode:'loan', downPct:'20', rate:'7.70', term:'30', closeVal:'3', closeUnit:'%',
+  finMode:'loan', downPct:'20', rate:'7.625', term:'30', closeVal:'2.5', closeUnit:'%',
   holdMonths:'4', holdUtil:'150',
-  ltv:'70', refiRate:'7.95', refiTerm:'30', refiCloseVal:'2.5', refiCloseUnit:'%', seasoning:'6',
-  hhDown:'5', hhRate:'6.95', hhTerm:'30', pmi:'0.70', hhCloseVal:'3', hhCloseUnit:'%', homestead:'50',
+  ltv:'70', refiRate:'7.75', refiTerm:'30', refiCloseVal:'2.5', refiCloseUnit:'%', seasoning:'6',
+  hhDown:'5', hhRate:'6.95', hhTerm:'30', pmi:'0.60', hhCloseVal:'3', hhCloseUnit:'%', homestead:'50',
   roomsRented:'2', myRooms:'1', roomVac:'5', util:'350', utilSplit:'equal', hhOther:'0',
-  vac:'8', maint:'8', capex:'8', otherMo:'0', mgmt:'self', pmPct:'10', leaseFee:'50', leasesPerYear:'0.5',
+  vac:'5', maint:'5', capex:'5', otherMo:'0', mgmt:'self', pmPct:'10', leaseFee:'50', leasesPerYear:'0.5',
   rentInstead:'1300', hhCash:'25000', hhMinCF:'0', rule70:'70', maxCashLeft:'10000', minCF:'200', minDSCR:'1.20', minCoC:'8',
-  appr:'3', rentG:'2.5', expG:'3.5', hhScen:'live',
+  appr:'3', rentG:'3', expG:'3', hhScen:'live',
   subjSqft:'', subjBeds:'', subjBaths:'', adjBed:'7500', adjBath:'5000'
 };
 ITEMS.forEach(([k])=>DEFAULTS['ri_'+k]='');
@@ -1020,6 +1020,12 @@ function hhBreakdownHTML(R){
   return `<table class="bd">${rows.map(([k,v])=>`<tr class="${k.startsWith('__')?'tot':''}"><td>${k.replace('__','')}</td><td class="${v<0?'neg':''}">${$(v)}</td></tr>`).join('')}</table>`;
 }
 
+function rentCheckHTML(R){
+  if(R.incomplete || !(R.ARV>0) || !(R.rent>0)) return '';
+  const ratio = R.rent/R.ARV*100, auto = typeof OV.rent!=='number';
+  if(ratio >= 0.7) return '';
+  return `<div class="callout warn" style="margin-top:10px">Rent is ${ratio.toFixed(2)}% of the ${$(R.ARV)} value${auto?' (area default for the bedroom count)':''}. Renovated Birmingham-area houses usually rent for about 0.7–0.9% of value, which here is ${$(r25(R.ARV*0.007))}–${$(r25(R.ARV*0.009))}/mo. Check rented comps and type in the real rent.</div>`;
+}
 function renderResults(s,R,V){
   const pill = `<span class="pill ${V.level}">${{pass:'✓',warn:'!',fail:'✕',none:'…'}[V.level]} ${V.word.toUpperCase()}</span>`;
   let h = `<div class="panel verdict"><div class="line">${pill}<span class="small">${R.mode==='hh'?'House hack':'BRRRR'} · ${LISTING.facts&&LISTING.facts.street?escapeHTML(LISTING.facts.street)+', ':''}${R.area.name}</span></div><div class="why">${V.why}</div>
@@ -1037,12 +1043,12 @@ function renderResults(s,R,V){
         ${statHTML('Cash out at refi',signed(R.cashOut),`New loan ${$(R.newLoan)} − payoff ${$(R.payoff)} − costs ${$(R.refiClose)}`)}
         ${statHTML('Cash left in deal',signed(R.cashLeft),R.cashLeft<=0?'You recovered everything':'Still tied up')}
       </div><div style="margin-top:10px">${inf}</div></div>
-      <div class="panel"><div class="sectionhead"><h3>Rental, day one after refi</h3></div>
+      <div class="panel"><div class="sectionhead"><h3>Rental, day one after refi</h3></div>${rentCheckHTML(R)}
       <div class="stats">
         ${statHTML('Cash flow before debt',`${signed(R.noi)}<span class="small">/mo</span>`,'Net operating income')}
         ${statHTML('Cash flow after debt',`${signed(R.cf)}<span class="small">/mo</span>`,`${$(R.cf*12)}/yr`)}
         ${statHTML('Cash-on-cash',pct(R.coc),R.cashLeft<=0?'No cash left in, so any positive cash flow is infinite':'Annual cash flow ÷ cash left in')}
-        ${statHTML('DSCR',x2(R.dscr),'NOI ÷ loan payment')}
+        ${statHTML('DSCR',x2(R.dscr),'Rent ÷ (loan + tax + insurance), the lender way')}
         ${statHTML('Equity created',signed(R.equity),`ARV − all-in cost · ${$(R.equityAfter)} after refi`)}
         ${statHTML('All-in cost',pct(R.allInPct),`${$(R.allIn)} of ${$(R.ARV)} ARV`)}
       </div></div>`;
@@ -1058,7 +1064,7 @@ function renderResults(s,R,V){
         ${statHTML('Roommate income',`${$(R.roomIncome+R.utilShare)}<span class="small">/mo</span>`,`${R.rooms} room${R.rooms===1?'':'s'} × ${$(R.roomRent)}${R.utilShare?' + utility share':''}`)}
       </div>${R.arvAssumed?'<div class="small" style="margin-top:8px">No ARV entered, so the house is valued at the purchase price for tax, insurance and equity.</div>':''}</div>
       <div class="panel"><div class="sectionhead"><h3>When I move out</h3></div>
-      <div class="small" style="margin-bottom:8px">The whole house rents for ${$(R.rent)}/mo with landlord insurance.${taxJump}</div>
+      <div class="small" style="margin-bottom:8px">The whole house rents for ${$(R.rent)}/mo with landlord insurance.${taxJump}</div>${rentCheckHTML(R)}
       <div class="stats">
         ${statHTML('Cash flow before debt',`${signed(R.noi)}<span class="small">/mo</span>`,'Net operating income')}
         ${statHTML('Cash flow after debt',`${signed(R.cf)}<span class="small">/mo</span>`,`${$(R.cf*12)}/yr`)}
@@ -1187,24 +1193,25 @@ function renderAssumptions(){
   const src = (t,u)=>`<a href="${u}" target="_blank" rel="noopener">${t}</a>`;
   const rows = [
     ['Owner-occupant 30-yr fixed','6.95%',src('Freddie Mac PMMS','https://www.freddiemac.com/pmms'),'Sep 17, 2026'],
-    ['Investor purchase rate','7.70% (PMMS + 0.75 pt)',src('The Mortgage Reports: investor premium 0.5–1.0 pt','https://themortgagereports.com/27698/investment-property-mortgage-rates-how-much-more-will-you-pay'),'Sep 2026'],
-    ['Investor cash-out refi rate','7.95% (PMMS + 1.0 pt)','Same source; cash-out on investment property carries extra pricing adjustments','Sep 2026'],
-    ['PMI','0.70% of loan per year',src('Zeitro: 2026 PMI averages 0.46–1.50%','https://www.zeitro.com/blog/pmi-cost'),'2026'],
+    ['Investor purchase rate','7.625% (PMMS + ~0.7 pt)',src('The Mortgage Reports: investor premium 0.5–1.0 pt','https://themortgagereports.com/27698/investment-property-mortgage-rates-how-much-more-will-you-pay'),'Sep 2026'],
+    ['Investor cash-out refi rate','7.75% (PMMS + 0.8 pt)','Same source; cash-out on investment property carries extra pricing adjustments','Sep 2026'],
+    ['PMI','0.60% of loan per year (good credit)',src('Zeitro: 2026 PMI averages 0.46–1.50%','https://www.zeitro.com/blog/pmi-cost'),'2026'],
     ['Assessment ratio','Rental / vacant: Class II, 20% of value. Owner-occupied: Class III, 10%',src('Code of Alabama §40-8-1','https://law.justia.com/codes/alabama/title-40/chapter-8/section-40-8-1/'),'2025 code'],
+    ['DSCR','Rent ÷ (loan payment + tax + insurance + HOA)','How DSCR lenders qualify rentals','—'],
     ['Tax formula','Value × ratio × total mills ÷ 1,000. BRRRR hold uses purchase price; rental and owner tax use ARV',src('Alabama DOR: property tax assessment','https://www.revenue.alabama.gov/property-tax/property-tax-assessment/'),'2025'],
     ['Millage by area','See table below',src('Alabama DOR 2025 millage rates','https://www.revenue.alabama.gov/wp-content/uploads/2025/09/2025-Millage-Rates.pdf')+', '+src('Shelby Co. millage','https://ptc.shelbyal.com/millage')+', '+src('CBS 42 city totals','https://www.cbs42.com/news/local/proposed-millage-rate-increase-could-help-fund-new-elementary-school-for-trussville/'),'Tax year 2025 (Oct 2025)'],
     ['Homestead exemption','$50/yr credit (state $4,000 + county $2,000 of assessed value)','Alabama DOR homestead exemption; confirm with your county','2025'],
-    ['Homeowner insurance','$7.60–$9.20 per $1,000 of value by area (Birmingham city ≈ $9.00)',src('Insurify: Birmingham avg $2,601/yr on $300k','https://insurify.com/homeowners-insurance/alabama/birmingham/'),'2026'],
-    ['Landlord insurance','Homeowner rate + 10% (DP-3)',src('Alabama landlord avg ≈ $1,761/yr, range $1,200–$2,200','https://tcdsagency.com/landlord-insurance'),'2026'],
+    ['Homeowner insurance','$6.50–$7.80 per $1,000 of value by area (Birmingham city $7.60)',src('Insurify: Birmingham avg $2,601/yr on $300k','https://insurify.com/homeowners-insurance/alabama/birmingham/'),'2026'],
+    ['Landlord insurance','Same rate as homeowner (≈ $1,440/yr on a $190k Birmingham house)',src('Alabama landlord median ≈ $1,089/yr','https://www.steadily.com/states/alabama')+', '+src('average ≈ $1,761/yr','https://tcdsagency.com/landlord-insurance'),'2026'],
     ['Rent by bedrooms','Metro base 2 BR $1,266 · 3 BR $1,583 · 4 BR $1,801, then × an area factor (0.85–1.30)',src('HUD FY2026 Fair Market Rents, Birmingham-Hoover','https://www.huduser.gov/portal/datasets/fmr/fmr2026/FY2026_FMR_Schedule.pdf')+'; area factors are my estimate. Cross-check: '+src('RentCafe 3 BR avg $1,667','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'FY2026'],
-    ['Purchase closing costs','3% of price (Alabama range 2–5%)',src('Rocket Mortgage: Alabama closing costs','https://www.rocketmortgage.com/learn/closing-costs-alabama'),'2026'],
+    ['Purchase closing costs','2.5% of price (Alabama range 2–5%; low transfer taxes)',src('Rocket Mortgage: Alabama closing costs','https://www.rocketmortgage.com/learn/closing-costs-alabama'),'2026'],
     ['Refi closing costs','2.5% of the new loan','Typical lender, title and appraisal costs; my estimate','2026'],
     ['Property management','10% of collected rent; leasing fee 50% of one month',src('RenPro: Birmingham 8–12%, leasing 50–100%','https://renpro.com/property-management-cost-birmingham-al/'),'2026'],
     ['Appreciation','3.0%/yr',src('Williams Group: Birmingham Q1 2026 +5.8% YoY; local forecasts 2–3%','https://www.thewilliamsgroupal.com/blog/greater-birmingham-market-update-june-2026/'),'Jun 2026'],
-    ['Rent growth','2.5%/yr',src('Birmingham average rent +2.7% YoY','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'Jul 2026'],
-    ['Expense growth','3.5%/yr','My estimate; insurance has been rising faster than inflation','2026'],
+    ['Rent growth','3.0%/yr',src('Birmingham average rent +2.7% YoY','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'Jul 2026'],
+    ['Expense growth','3.0%/yr','Matched to rent growth; raise it if insurance keeps climbing','2026'],
     ['House-hack repairs reserve','1% of home value per year while you live there','Common homeowner rule of thumb','—'],
-    ['Vacancy, maintenance, CapEx','8% / 8% / 8% of rent','Common underwriting rules of thumb for older Birmingham housing stock','—'],
+    ['Vacancy, maintenance, CapEx','5% / 5% / 5% of rent','Standard for a freshly rehabbed house; raise maintenance and CapEx for older, un-updated houses','—'],
     ['Rent instead (house hack)','$1,300/mo: 1-bed apartment + ~$125 utilities',src('RentCafe: Birmingham 1 BR avg $1,266','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/')+'; Apartments.com 1 BR ≈ $1,178','2026'],
     ['Utilities','Holding $150/mo · house hack $350/mo (incl. internet)','My estimate for a 3 BR in the Alabama Power / Spire service area','—']
   ];
@@ -1420,7 +1427,12 @@ function save(){
   }catch(e){}
 }
 function restore(){
-  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); if(Array.isArray(d.comps)) COMPS=d.comps; if(d.listing&&d.listing.text){ LISTING=d.listing; document.getElementById('lfText').value=LISTING.text; } return true; }catch(e){ return false; }
+  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{};
+    // saved deals from before the defaults were updated: move untouched old defaults to the new ones
+    const OLD_DEFAULTS = {rate:'7.70', closeVal:'3', refiRate:'7.95', pmi:'0.70', vac:'8', maint:'8', capex:'8', rentG:'2.5', expG:'3.5'};
+    const vals = {...(d.vals||{})};
+    for(const [k,v] of Object.entries(OLD_DEFAULTS)) if(String(vals[k]??'').trim()===v) vals[k]=DEFAULTS[k];
+    applyValues({...DEFAULTS,...vals}); if(Array.isArray(d.comps)) COMPS=d.comps; if(d.listing&&d.listing.text){ LISTING=d.listing; document.getElementById('lfText').value=LISTING.text; } return true; }catch(e){ return false; }
 }
 
 /* ---------- events ---------- */
