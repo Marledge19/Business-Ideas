@@ -522,6 +522,16 @@ function areaForCity(city, t, zip){
   }
   return null;
 }
+function cleanText(text){
+  // Social-media posts use "fancy" bold/italic Unicode letters, emoji between words, 💲 for $, and invisible joiners.
+  return String(text||'').normalize('NFKC')
+    .replace(/[​-‏⁠﻿︎️⃣]/g,'')
+    .replace(/[  -   　]/g,' ')
+    .replace(/[‒-―−]/g,'-')
+    .replace(/[💲💵💰🤑]/gu,'$').replace(/\$(?:\s*\$)+/g,'$')
+    .replace(/\p{Extended_Pictographic}/gu,' ')
+    .replace(/[®™]/g,'').replace(/\r/g,'');
+}
 function housePrice(n,u,small){
   // money as people type it in deal posts: "$86,500k" (typo) = $86,500, "$250" for an ARV = $250,000
   let x = parseFloat(String(n).replace(/,/g,'')); if(!isFinite(x)) return NaN;
@@ -533,7 +543,8 @@ function housePrice(n,u,small){
 }
 function looseMoney(t,labels,small,min,max){
   // "Label $X", "Label: X", "~Label = $Xk +/-", "Label is about $X": no colon needed
-  const re = new RegExp("\\b(?:"+labels+")\\b[ \\t]*(?:[:=~\\-–—]+|is|of|at|@|around|about|approx\\.?|roughly|est\\.?)?[ \\t]*(?:[:=~\\-–—]|around|about|approx\\.?|roughly)?[ \\t]*(?:\\$|usd)?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?)(?:[ \\t]*(?:-|–|to)[ \\t]*\\$?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?))?[ \\t]*(k|m|mil|million|thousand)?(?![a-z\\d])","gi");
+  const gap = "[^a-z0-9$\\n]{0,8}";
+  const re = new RegExp("\\b(?:"+labels+")\\b"+gap+"(?:\\n"+gap+")?(?:(?:is|of|at|for|around|about|approx\\.?|roughly|est\\.?|only|just)\\b"+gap+")?(?:(?:around|about|approx\\.?|roughly)\\b"+gap+")?(?:\\$|usd)?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?)(?:[ \\t]*(?:-|–|to)[ \\t]*\\$?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?))?[ \\t]*(k|m|mil|million|thousand)?(?![a-z\\d])","gi");
   let m; while((m=re.exec(t))){
     const a=housePrice(m[1],m[3],small), b=m[2]!=null ? housePrice(m[2],m[3],small) : a;
     const lo=Math.min(a,b), hi=Math.max(a,b);
@@ -549,7 +560,7 @@ function cleanStreet(raw){
   return (m ? t.slice(m.index) : t).trim();
 }
 function parseListing(text){
-  const t = String(text||'').replace(/\r/g,'').replace(/ /g,' ').replace(/[®™]/g,'');
+  const t = cleanText(text);
   const f = {flags:[]}; let m;
 
   // address and area
@@ -563,7 +574,7 @@ function parseListing(text){
   // price
   let p = labeled(t,"list(?:ing)? price|asking price|price|sale price|listed (?:for|at)|offered at",10000);
   if(p && p.val>5e6){ const v=housePrice(p.val/1e3,'k',0); p = v<=5e6 ? {val:v} : null; }
-  if(!p) p = looseMoney(t,"purchase price|contract price|asking price|wholesale price|buy price|list price|sale price|asking|price|pp|priced at|offered at|listed (?:for|at)|price of",5000,10000,5e6);
+  if(!p) p = looseMoney(t,"purchase price|contract price|asking price|wholesale price|buy(?:ing)? price|list price|sale price|offer price|all[- ]in price|purchase|acquisition|asking|price|pp|priced at|offered at|listed (?:for|at)|price of|under contract(?: at| for)?|(?:buy|get|grab|take) (?:it|this|this one)? ?for",5000,10000,5e6);
   if(!p){ const re=/(?:^|\n)[ \t]*\$[ \t]?(\d{1,3}(?:,\d{3})+|\d{5,7})(?![\d,])(?![^\n]{0,12}(?:\/\s?mo|per month|a month|monthly|\/month))/g; while((m=re.exec(t))){ const v=toMoney(m[1]); if(v>=10000){ p={val:v}; break; } } }
   if(p) f.price = p.val;
 
@@ -661,7 +672,7 @@ function parseDateLoose(str){
 function fmtDate(d){ return d ? `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}` : ''; }
 function monthsAgo(d,today){ if(!d) return null; return Math.max(0,(today-d)/(1000*60*60*24*30.44)); }
 function parseComp(text){
-  const t = String(text||'').replace(/\r/g,'').replace(/ /g,' ').replace(/[®™]/g,'');
+  const t = cleanText(text);
   const f = parseListing(t); let m, price = null, date = null;
   m = /\bsold[^\n$]{0,40}\$[ \t]?(\d[\d,]*(?:\.\d+)?)[ \t]?(k|m)?\b/i.exec(t);
   if(m && toMoney(m[1],m[2])>=10000) price = toMoney(m[1],m[2]);
@@ -1284,7 +1295,7 @@ function readListing(){
   clearTimeout(SAVE_T); save();
 }
 document.getElementById('lfRead').addEventListener('click',readListing);
-document.getElementById('lfText').addEventListener('paste',()=>setTimeout(readListing,0));
+let LF_T; document.getElementById('lfText').addEventListener('input',e=>{ clearTimeout(LF_T); if(e.target.value.trim()) LF_T=setTimeout(readListing,500); });
 document.getElementById('lfClear').addEventListener('click',()=>{ LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; update(); toast('Listing cleared'); });
 function clearListing(){ COMPS=[]; renderCompTable(); LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; }
 
