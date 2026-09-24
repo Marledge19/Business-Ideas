@@ -319,7 +319,9 @@ function calc(s){
   A.mills = a.mills; const mills = Math.max(0, pick(s,'mills',A.mills));
   const beds = [2,3,4].includes(s.beds) ? s.beds : 3;
   A.rent = r25(FMR[beds]*a.rf); const rent = Math.max(0, pick(s,'rent',A.rent));
-  const P = Math.max(0,fin(s.price)), ARV = Math.max(0,fin(s.arv));
+  const P = Math.max(0,fin(s.price));
+  const arvAssumed = s.mode==='hh' && !(fin(s.arv)>0) && P>0;   // house hack: no ARV means the house is worth what you pay
+  const ARV = arvAssumed ? P : Math.max(0,fin(s.arv));
   const rehabBase = Math.max(0, s.rehabBaseOv!=null ? s.rehabBaseOv
       : (s.rehabMode==='items' ? ITEMS.reduce((t,[k])=>t+fin(s['ri_'+k]),0) : fin(s.rehabLump)));
   const rehab = rehabBase*(1+Math.max(0,fin(s.contPct))/100);
@@ -327,7 +329,7 @@ function calc(s){
   A.rentTax = ARV*CLASS_II*mills/1000/12; const tax = pick(s,'rentTax',A.rentTax);
   A.rentIns = ARV*insLL/1000/12;           const ins = pick(s,'rentIns',A.rentIns);
   const ops = rentalOps(s,rent,tax,ins);
-  const R = {mode:s.mode, area:a, auto:A, mills, beds, rent, P, ARV, rehabBase, rehab, ops, incomplete: !(P>0 && ARV>0)};
+  const R = {mode:s.mode, area:a, auto:A, mills, beds, rent, P, ARV, rehabBase, rehab, ops, arvAssumed, incomplete: !(P>0 && ARV>0)};
   return s.mode==='hh' ? calcHH(s,R,insHO) : calcB(s,R,insLL);
 }
 
@@ -402,36 +404,36 @@ function calcHH(s,R,insHO){
   const roomIncome = rooms*roomRent*(1-clamp(fin(s.roomVac),0,100)/100);
   const util = fin(s.util);
   const utilShare = s.utilSplit==='equal' ? util*rooms/(rooms+1) : 0;
-  const maint = R.rent*fin(s.maint)/100, capex = R.rent*fin(s.capex)/100, hOther = fin(s.hhOther);
-  const ownerCost = pi + pmiMo + hTax + hIns + util + maint + capex + hOther;
+  A.hhReserve = ARV*0.01/12; const hhRes = Math.max(0,pick(s,'hhReserve',A.hhReserve));   // owner rule of thumb: 1% of value per year
+  const hOther = fin(s.hhOther);
+  const ownerCost = pi + pmiMo + hTax + hIns + util + hhRes + hOther;
   const housing = ownerCost - roomIncome - utilShare;
   const cashIn = down + closeP + R.rehab;
   const ds = pi + pmiMo, noi = R.ops.noi, cf = noi - ds;
   const dscr = dscrOf(noi,ds), coc = cocOf(cf,cashIn);
   const allIn = P + closeP + R.rehab;
-  Object.assign(R,{closeP,loan,down,pi,pmiMo,hTax,hIns,roomRent,rooms,myRooms,roomIncome,util,utilShare,maint,capex,hOther,ownerCost,housing,cashIn,cashLeft:cashIn,ds,noi,cf,dscr,coc,allIn,
+  Object.assign(R,{closeP,loan,down,pi,pmiMo,hTax,hIns,roomRent,rooms,myRooms,roomIncome,util,utilShare,hhRes,hOther,ownerCost,housing,cashIn,cashLeft:cashIn,ds,noi,cf,dscr,coc,allIn,
     allInPct: ARV>0 ? allIn/ARV*100 : NaN, equity: ARV-allIn, equityAfter: ARV-loan, roomsOk: rooms+myRooms <= R.beds,
     breakEvenRent: R.ops.k>0 ? (R.ops.fixed+ds)/R.ops.k : NaN});
+  const rentInstead = fin(s.rentInstead), prin1 = pi - loan*r;
   const t70 = fin(s.rule70)/100*ARV;
+  Object.assign(R,{rentInstead, hhCash: fin(s.hhCash), savings: rentInstead - housing, prin1, netCost: housing - prin1});
   R.tests = [
-    {id:'hc', name:'My housing cost', pass: housing <= fin(s.maxHousing),
-      detail:`${$(housing)}/mo vs. target ≤ ${$(fin(s.maxHousing))}/mo`,
+    {id:'live', name:'Cheaper than renting', pass: housing <= rentInstead,
+      detail:`You pay ${$(housing)}/mo vs. ${$(rentInstead)}/mo to rent instead${housing<=rentInstead?` (saves ${$(rentInstead-housing)}/mo)`:''}`,
       fixes:[['roomRent','min','Rent per room needed to pass'],['price','max','Max purchase price to pass']]},
-    {id:'r70', name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70,
-      detail:`Purchase + repairs ${$(P+R.rehab)} vs. limit ${$(t70)} (${fin(s.rule70)}% of ARV)`,
-      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)],['arv','min','ARV needed to pass']]},
-    {id:'cash', name:'Cash in the deal', pass: cashIn <= fin(s.maxCashLeft),
-      detail:`${$(cashIn)} (no refinance) vs. target ≤ ${$(fin(s.maxCashLeft))}`,
-      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)]]},
-    {id:'cf', name:'Cash flow after move-out', pass: cf >= fin(s.minCF),
-      detail:`${$(cf)}/mo vs. target ≥ ${$(fin(s.minCF))}/mo`,
-      fixes:[['rent','min','Whole-house rent needed to pass']]},
-    {id:'dscr', name:'DSCR after move-out', pass: dscr >= fin(s.minDSCR),
-      detail:`${x2(dscr)} vs. target ≥ ${x2(fin(s.minDSCR))}`,
-      fixes:[['rent','min','Whole-house rent needed to pass']]},
-    {id:'coc', name:'Cash-on-cash after move-out', pass: cocPass(cf,cashIn,fin(s.minCoC)),
-      detail:`${pct(coc)} vs. target ≥ ${pct(fin(s.minCoC))}`,
+    {id:'cash', name:'Cash to close', pass: cashIn <= fin(s.hhCash),
+      detail:`${$(cashIn)} needed vs. ${$(fin(s.hhCash))} available`,
+      fixes: R.rehab>0 ? [['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)]] : [['price','max','Max purchase price to pass']]},
+    {id:'move', name:'Works as a rental when I move out', pass: cf >= fin(s.hhMinCF),
+      detail:`${$(cf)}/mo renting the whole house vs. target ≥ ${$(fin(s.hhMinCF))}/mo`,
       fixes:[['rent','min','Whole-house rent needed to pass'],['price','max','Max purchase price to pass']]}
+  ];
+  // investor yardsticks: shown for reference, not part of the house-hack verdict
+  R.info = [
+    {name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70, detail:`Purchase + repairs ${$(P+R.rehab)} vs. ${$(t70)}`},
+    {name:'DSCR after move-out', pass: dscr >= fin(s.minDSCR), detail:`${x2(dscr)} vs. ${x2(fin(s.minDSCR))}`},
+    {name:'Cash-on-cash after move-out', pass: cocPass(cf,cashIn,fin(s.minCoC)), detail:`${pct(coc)} vs. ${pct(fin(s.minCoC))}`}
   ];
   return R;
 }
@@ -482,6 +484,7 @@ function solveFixes(s,R){
   }
 }
 function verdict(R){
+  if(R.mode==='hh') return verdictHH(R);
   if(R.incomplete){
     const why = R.P>0 ? `Purchase price is ${$(R.P)}. Add the after-repair value (ARV) to run the tests.`
               : R.ARV>0 ? `ARV is ${$(R.ARV)}. Add the purchase price to run the tests.`
@@ -503,6 +506,20 @@ function verdict(R){
   }
   if(R.dscr < 1 || f.length >= 3) return {level:'fail', word:'Fail', why:`Fails ${f.length} of ${n} tests: ${names}.${firstFix?' First fix: '+firstFix+'.':''}`};
   return {level:'warn', word:'Marginal', why:`Close, but misses ${names}.${firstFix?' '+firstFix+'.':''}`};
+}
+
+function verdictHH(R){
+  if(R.incomplete) return {level:'none', word:'Needs price', why:'Enter a purchase price to run the house-hack checks.'};
+  const [live, cash, move] = R.tests;
+  const fixOf = t => { const q=(t.solved||[]).find(z=>z.x!=null); return q ? `${q.label.replace(' to pass','').replace(/ \(before.*\)/,'')}: ${$(q.x)}` : ''; };
+  const liveTxt = R.savings>=0 ? `you’d live for ${$(R.housing)}/mo, ${$(R.savings)}/mo less than renting` : `you’d pay ${$(R.housing)}/mo, ${$(-R.savings)}/mo more than renting`;
+  const moveTxt = R.cf>=0 ? `it cash flows ${$(R.cf)}/mo as a rental later` : `as a full rental later it would lose ${$(-R.cf)}/mo`;
+  if(live.pass && cash.pass && move.pass) return {level:'pass', word:'Pass', why:`Good house hack: ${liveTxt}, and ${moveTxt}.`};
+  const nearLive = live.pass || R.housing <= R.rentInstead*1.25;
+  if(live.pass && cash.pass) return {level:'warn', word:'Marginal', why:`Works while you live there (${liveTxt}), but ${moveTxt}.${fixOf(move)?' '+fixOf(move)+'.':''}`};
+  if(live.pass && !cash.pass) return {level: move.pass?'warn':'fail', word: move.pass?'Marginal':'Fail', why:`Needs ${$(R.cashIn)} to close, more than the ${$(R.hhCash)} you have. Otherwise ${liveTxt}${move.pass?'':`, but ${moveTxt}`}.${fixOf(cash)?' '+fixOf(cash)+'.':''}`};
+  if(!live.pass && nearLive && cash.pass) return {level:'warn', word:'Marginal', why:`Close: ${liveTxt}.${fixOf(live)?' '+fixOf(live)+'.':''}`};
+  return {level:'fail', word:'Fail', why:`${liveTxt.charAt(0).toUpperCase()+liveTxt.slice(1)}${!cash.pass?` and it needs ${$(R.cashIn)} to close`:''}.${fixOf(live)?' '+fixOf(live)+'.':''}`};
 }
 
 /* ---------- listing reader (Zillow / Redfin / Realtor.com / MLS text) ---------- */
@@ -759,7 +776,7 @@ function project(s,R){
       opex = (o.vac+o.maint+o.capex+o.mgmt+o.leasing)*12*gR + (o.tax+o.ins+o.other)*12*gE;
     } else {
       income = (R.roomIncome+R.utilShare)*12*gR;
-      opex = (R.hTax+R.hIns+R.util+R.maint+R.capex+R.hOther)*12*gE;
+      opex = (R.hTax+R.hIns+R.util+R.hhRes+R.hOther)*12*gE;
     }
     const cf = income - opex - debt; cum += cf;
     const loan = bal(L0,r,n,12*y), value = R.ARV*Math.pow(1+ap,y);
@@ -801,7 +818,7 @@ document.getElementById('inputs').innerHTML = [
     `<div class="fields">
       <div class="fld"><label for="beds">Bedrooms</label><div class="inp"><select id="beds" style="flex:1;border:0;background:transparent"><option value="2">2 bedrooms</option><option value="3">3 bedrooms</option><option value="4">4 bedrooms</option></select></div></div>
       ${fld('price','Purchase price',{pre:'$'})}
-      ${fld('arv','After-repair value (ARV)',{pre:'$',hint:'Appraised value once the work is done. <button type="button" class="linkish" id="toComps">Estimate from sold comps</button>'})}
+      ${fld('arv','After-repair value (ARV)',{pre:'$',hint:'<span id="arvHintText">Appraised value once the work is done.</span> <button type="button" class="linkish" id="toComps">Estimate from sold comps</button>'})}
       ${fld('mills','Total property tax millage',{suf:'mills',auto:true,hint:'Area default'})}
     </div>`),
   `<details class="card lf comps" id="compSec" data-mode="both"><summary><h2>ARV from sold comps</h2><span class="tw"><span class="o">Show</span><span class="c">Hide</span></span></summary>
@@ -859,6 +876,7 @@ document.getElementById('inputs').innerHTML = [
       ${fld('homestead','Homestead exemption',{pre:'$',suf:'/yr',hint:'State + county exemptions ≈ $50/yr'})}
       ${fld('hhTax','Property tax (owner-occupied)',{pre:'$',suf:'/mo',auto:true})}
       ${fld('hhIns','Homeowner insurance',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('hhReserve','Repairs & CapEx reserve',{pre:'$',suf:'/mo',auto:true,hint:'Auto: 1% of home value per year'})}
      </div>
      <div class="callout">Repairs in house-hack mode are paid in cash at purchase. If you use an FHA 203(k) or HomeStyle loan instead, lower the repair budget and raise the purchase price by the amount you finance.</div>`),
   card('secRoom','hh','Roommates','',
@@ -890,7 +908,9 @@ document.getElementById('inputs').innerHTML = [
      </div>`),
   card('secTargets','both','Your targets','Each test is pass/fail against these numbers.',
     `<div class="fields">
-      ${fld('maxHousing','Max monthly housing cost for me',{pre:'$',suf:'/mo'})}
+      ${fld('rentInstead','What I’d pay to rent instead',{pre:'$',suf:'/mo',hint:'A 1-bed apartment plus utilities'})}
+      ${fld('hhCash','Cash I have to close',{pre:'$',hint:'Down payment, closing costs and repairs'})}
+      ${fld('hhMinCF','Min cash flow after move-out',{pre:'$',suf:'/mo',hint:'0 = break even as a rental'})}
       ${fld('rule70','Purchase + rehab rule',{suf:'% of ARV'})}
       ${fld('maxCashLeft','Max cash left in deal',{pre:'$'})}
       ${fld('minCF','Min monthly cash flow',{pre:'$',suf:'/mo'})}
@@ -898,7 +918,8 @@ document.getElementById('inputs').innerHTML = [
       ${fld('minCoC','Min cash-on-cash',{suf:'%'})}
      </div>`)
 ].join('');
-document.getElementById('maxHousing').closest('.fld').dataset.mode='hh';
+['rentInstead','hhCash','hhMinCF'].forEach(id=>document.getElementById(id).closest('.fld').dataset.mode='hh');
+['rule70','maxCashLeft','minCF'].forEach(id=>document.getElementById(id).closest('.fld').dataset.mode='brrrr');
 
 document.getElementById('area').innerHTML = AREAS.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
 
@@ -911,13 +932,13 @@ const DEFAULTS = {
   hhDown:'5', hhRate:'6.95', hhTerm:'30', pmi:'0.70', hhCloseVal:'3', hhCloseUnit:'%', homestead:'50',
   roomsRented:'2', myRooms:'1', roomVac:'5', util:'350', utilSplit:'equal', hhOther:'0',
   vac:'8', maint:'8', capex:'8', otherMo:'0', mgmt:'self', pmPct:'10', leaseFee:'50', leasesPerYear:'0.5',
-  maxHousing:'500', rule70:'70', maxCashLeft:'10000', minCF:'200', minDSCR:'1.20', minCoC:'8',
+  rentInstead:'1300', hhCash:'25000', hhMinCF:'0', rule70:'70', maxCashLeft:'10000', minCF:'200', minDSCR:'1.20', minCoC:'8',
   appr:'3', rentG:'2.5', expG:'3.5', hhScen:'live',
   subjSqft:'', subjBeds:'', subjBaths:'', adjBed:'7500', adjBath:'5000'
 };
 ITEMS.forEach(([k])=>DEFAULTS['ri_'+k]='');
 const SAMPLE = {price:'110000', arv:'190000', rehabLump:'45000', ov:{rent:1650}};
-const AUTO_KEYS = ['mills','rent','holdTax','holdIns','rentTax','rentIns','hhTax','hhIns','roomRent'];
+const AUTO_KEYS = ['mills','rent','holdTax','holdIns','rentTax','rentIns','hhTax','hhIns','roomRent','hhReserve'];
 let OV = {};
 let STATE = {};
 const RADIOS = ['mode','rehabMode','finMode','mgmt'];
@@ -991,7 +1012,7 @@ function breakdownHTML(R){
   return `<table class="bd">${rows.map(([k,v])=>`<tr class="${k.startsWith('__')?'tot':''}"><td>${k.replace('__','')}</td><td class="${v<0?'neg':''}">${$(v)}</td></tr>`).join('')}</table>`;
 }
 function hhBreakdownHTML(R){
-  const rows=[['Mortgage P&I',R.pi],['PMI',R.pmiMo],['Property tax (Class III)',R.hTax],['Homeowner insurance',R.hIns],['Utilities (whole house)',R.util],['Maintenance',R.maint],['CapEx reserve',R.capex]];
+  const rows=[['Mortgage P&I',R.pi],['PMI',R.pmiMo],['Property tax (Class III)',R.hTax],['Homeowner insurance',R.hIns],['Utilities (whole house)',R.util],['Repairs & CapEx reserve',R.hhRes]];
   if(R.hOther) rows.push(['Other',R.hOther]);
   rows.push(['__Total owner cost',R.ownerCost],['Roommate rent (after vacancy)',-R.roomIncome]);
   if(R.utilShare) rows.push(['Roommates’ utility share',-R.utilShare]);
@@ -1029,23 +1050,24 @@ function renderResults(s,R,V){
     const taxJump = R.hTax>0 ? ` Property tax goes from ${$(R.hTax)}/mo to ${$(R.ops.tax)}/mo when you move out (Class III → Class II).` : '';
     h += `<div class="panel"><div class="sectionhead"><h3>Living there</h3></div>
       <div class="stats">
-        ${statHTML('My effective housing cost',`${signed(R.housing)}<span class="small">/mo</span>`,R.housing<0?'Roommates cover everything and pay you':`vs. ${$(R.roomRent)}/mo to rent one room here at market`,'wide hero')}
-        ${statHTML('Cash to close',$(R.cashIn),`Down ${$(R.down)} · closing ${$(R.closeP)} · repairs ${$(R.rehab)}`,'wide')}
-        ${statHTML('Total owner cost',`${$(R.ownerCost)}<span class="small">/mo</span>`,'PITI, PMI, utilities, reserves')}
+        ${statHTML('My monthly housing cost',`${signed(R.housing)}<span class="small">/mo</span>`,R.housing<0?'Roommates cover everything and pay you':`vs. ${$(R.rentInstead)}/mo to rent instead`,'wide hero')}
+        ${statHTML(R.savings>=0?'Saved vs. renting':'Costs more than renting',`${$(Math.abs(R.savings))}<span class="small">/mo</span>`,`${$(Math.abs(R.savings)*12)}/yr`)}
+        ${statHTML('Equity from loan payoff',`${$(R.prin1)}<span class="small">/mo</span>`,`Real cost after equity: ${$(R.netCost)}/mo`)}
+        ${statHTML('Cash to close',$(R.cashIn),`Down ${$(R.down)} · closing ${$(R.closeP)}${R.rehab?` · repairs ${$(R.rehab)}`:''}`,'wide')}
+        ${statHTML('Total owner cost',`${$(R.ownerCost)}<span class="small">/mo</span>`,'Mortgage, PMI, tax, insurance, utilities, reserves')}
         ${statHTML('Roommate income',`${$(R.roomIncome+R.utilShare)}<span class="small">/mo</span>`,`${R.rooms} room${R.rooms===1?'':'s'} × ${$(R.roomRent)}${R.utilShare?' + utility share':''}`)}
-      </div></div>
+      </div>${R.arvAssumed?'<div class="small" style="margin-top:8px">No ARV entered, so the house is valued at the purchase price for tax, insurance and equity.</div>':''}</div>
       <div class="panel"><div class="sectionhead"><h3>When I move out</h3></div>
       <div class="small" style="margin-bottom:8px">The whole house rents for ${$(R.rent)}/mo with landlord insurance.${taxJump}</div>
       <div class="stats">
         ${statHTML('Cash flow before debt',`${signed(R.noi)}<span class="small">/mo</span>`,'Net operating income')}
         ${statHTML('Cash flow after debt',`${signed(R.cf)}<span class="small">/mo</span>`,`${$(R.cf*12)}/yr`)}
-        ${statHTML('Cash-on-cash',pct(R.coc),'Annual cash flow ÷ cash in')}
-        ${statHTML('DSCR',x2(R.dscr),'NOI ÷ (P&I + PMI)')}
-        ${statHTML('Equity created',signed(R.equity),`ARV − all-in cost · ${$(R.equityAfter)} over the loan`)}
-        ${statHTML('All-in cost',pct(R.allInPct),`${$(R.allIn)} of ${$(R.ARV)} ARV`)}
+        ${statHTML('Equity',signed(R.equityAfter),`Value ${$(R.ARV)} − loan ${$(R.loan)}`)}
+        ${statHTML('Break-even rent',isFinite(R.breakEvenRent)?`${$(Math.ceil(R.breakEvenRent))}<span class="small">/mo</span>`:'—','Whole-house rent to cover everything')}
       </div></div>`;
   }
   h += `<div class="panel"><div class="sectionhead"><h3>Tests</h3><span class="small">${R.tests.filter(t=>t.pass).length} of ${R.tests.length} pass</span></div>${R.incomplete?'<div class="small">Waiting for purchase price and ARV.</div>':testsHTML(R)}</div>`;
+  if(R.mode==='hh' && !R.incomplete && R.info) h += `<div class="panel"><div class="sectionhead"><h3>Investor checks</h3><span class="small">For reference, not in the verdict</span></div><ul class="tests">${R.info.map(t=>`<li class="test ${t.pass?'pass':'fail'}" style="border-left-color:var(--line-strong)"><div class="th"><span class="nm">${t.name}</span><span class="small">${t.pass?'meets':'misses'} investor target</span></div><div class="dt">${t.detail}</div></li>`).join('')}</ul><div class="small" style="margin-top:8px">These are BRRRR-style targets. Owner-occupant loans don’t require them, and a house bought at retail to live in rarely meets them.</div></div>`;
   h += `<div class="panel"><details class="more"><summary>Monthly breakdown</summary><div style="margin-top:8px">${R.mode==='hh'?'<h3 style="margin:6px 0">Living there</h3>'+hhBreakdownHTML(R)+'<h3 style="margin:14px 0 6px">After move-out</h3>':''}${breakdownHTML(R)}</div></details></div>`;
   }
   document.getElementById('results').innerHTML = h;
@@ -1074,10 +1096,11 @@ function summaryText(s,R,V){
     L.push(`Financing: ${fin(s.hhDown)}% down at ${fin(s.hhRate)}% / ${fin(s.hhTerm)} yr + ${fin(s.pmi)}% PMI`);
     L.push('');
     L.push(`Cash to close: ${$(R.cashIn)}`);
-    L.push(`Owner cost ${$(R.ownerCost)}/mo − roommates ${$(R.roomIncome+R.utilShare)}/mo = MY HOUSING COST ${$(R.housing)}/mo`);
+    L.push(`Owner cost ${$(R.ownerCost)}/mo − roommates ${$(R.roomIncome+R.utilShare)}/mo = MY HOUSING COST ${$(R.housing)}/mo (renting instead: ${$(R.rentInstead)}/mo)`);
+    L.push(`Equity from loan payoff ${$(R.prin1)}/mo · real cost after equity ${$(R.netCost)}/mo`);
     L.push(`After move-out: NOI ${$(R.noi)}/mo · cash flow ${$(R.cf)}/mo`);
   }
-  L.push(`Cash-on-cash ${pct(R.coc)} · DSCR ${x2(R.dscr)} · Equity created ${$(R.equity)} · All-in ${pct(R.allInPct)} of ARV`);
+  if(!isHH) L.push(`Cash-on-cash ${pct(R.coc)} · DSCR ${x2(R.dscr)} · Equity created ${$(R.equity)} · All-in ${pct(R.allInPct)} of ARV`);
   L.push('');
   L.push('TESTS');
   R.tests.forEach(t=>{
@@ -1180,7 +1203,9 @@ function renderAssumptions(){
     ['Appreciation','3.0%/yr',src('Williams Group: Birmingham Q1 2026 +5.8% YoY; local forecasts 2–3%','https://www.thewilliamsgroupal.com/blog/greater-birmingham-market-update-june-2026/'),'Jun 2026'],
     ['Rent growth','2.5%/yr',src('Birmingham average rent +2.7% YoY','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'Jul 2026'],
     ['Expense growth','3.5%/yr','My estimate; insurance has been rising faster than inflation','2026'],
+    ['House-hack repairs reserve','1% of home value per year while you live there','Common homeowner rule of thumb','—'],
     ['Vacancy, maintenance, CapEx','8% / 8% / 8% of rent','Common underwriting rules of thumb for older Birmingham housing stock','—'],
+    ['Rent instead (house hack)','$1,300/mo: 1-bed apartment + ~$125 utilities',src('RentCafe: Birmingham 1 BR avg $1,266','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/')+'; Apartments.com 1 BR ≈ $1,178','2026'],
     ['Utilities','Holding $150/mo · house hack $350/mo (incl. internet)','My estimate for a 3 BR in the Alabama Power / Spire service area','—']
   ];
   const areaRows = AREAS.map(a=>`<tr><td>${a.name}</td><td class="n">${a.county}</td><td class="n">${a.mills.toFixed(1)}</td><td class="n">${a.basis}</td><td class="n">${(a.mills*CLASS_II/10).toFixed(2)}%</td><td class="n">${(a.mills*CLASS_III/10).toFixed(2)}%</td><td class="n">${$(r25(FMR[2]*a.rf))} / ${$(r25(FMR[3]*a.rf))} / ${$(r25(FMR[4]*a.rf))}</td><td class="n">$${a.ins.toFixed(2)}</td></tr>`).join('');
@@ -1213,6 +1238,8 @@ function update(){
   document.getElementById('loanFields').hidden = s.finMode==='cash';
   document.getElementById('loanFields').style.display = s.finMode==='cash' ? 'none' : 'contents';
   document.getElementById('pmFields').hidden = s.mgmt!=='pm';
+  document.getElementById('arvHintText').textContent = mode==='hh' ? 'Leave blank to use the purchase price.' : 'Appraised value once the work is done.';
+  document.getElementById('secTargets_d').textContent = mode==='hh' ? 'A house hack passes when it’s cheaper than renting, fits your cash, and at least breaks even as a rental later.' : 'Each test is pass/fail against these numbers.';
   document.getElementById('secRent_t').textContent = mode==='hh' ? 'When I move out: full rental' : 'Rental';
   const rd=document.getElementById('secRent_d'); if(!rd){ const hdr=document.querySelector('#secRent header'); const p=document.createElement('p'); p.id='secRent_d'; hdr.appendChild(p); }
   document.getElementById('secRent_d').textContent = mode==='hh'
