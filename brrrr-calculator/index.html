@@ -118,6 +118,24 @@ button.tag:hover{text-decoration:underline}
 .found li.miss .fv{color:var(--warn)}
 .found small{grid-column:1/-1;color:var(--faint);font-size:12px}
 .lfhead{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 2px}
+.comps table{font-size:13px}
+.comps td,.comps th{padding:5px 6px;vertical-align:middle}
+.comps td input[type=text]{width:100%;min-width:64px;border:1px solid var(--line-strong);border-radius:6px;background:var(--sunk);padding:5px 6px;font-size:13px;text-align:right}
+.comps td input.addr{text-align:left;min-width:150px}
+.comps td input.sm{min-width:36px;width:44px}
+.comps td input[data-k=date]{min-width:98px}
+.comps td input:focus{outline:none;border-color:var(--accent)}
+.comps tr.off td{opacity:.55}
+.comps .st{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase}
+.comps .st.used{color:var(--pass)} .comps .st.outlier,.comps .st.incomplete{color:var(--warn)} .comps .st.off{color:var(--faint)}
+.xbtn{border:0;background:none;color:var(--faint);cursor:pointer;font-size:16px;padding:2px 6px}
+.xbtn:hover{color:var(--fail)}
+.arvout{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden;margin-top:12px}
+.arvout div{background:var(--surface);padding:10px 12px}
+.arvout span{display:block;font-size:12px;color:var(--muted);font-weight:600}
+.arvout b{display:block;font-size:19px;margin-top:2px}
+.arvout .mid b{color:var(--accent)}
+.linkish{border:0;background:none;color:var(--accent);font-weight:650;cursor:pointer;padding:0;text-decoration:underline;font-size:12px}
 .lflags{display:flex;flex-direction:column;gap:6px;margin-top:10px}
 .lflag{border-radius:8px;padding:8px 10px;font-size:13px}
 .lflag b{display:block}
@@ -504,13 +522,20 @@ function areaForCity(city, t, zip){
   }
   return null;
 }
+function cleanStreet(raw){
+  // keep only the street: drop leading "3 bd 2 ba 1,380 sqft ·" style text
+  const t = String(raw).split(/\s[·|•–-]\s|\t|\s{2,}/).pop().trim();
+  const re = /\b\d{1,6}\s+(?!(?:sq\.?\s?ft|sqft|sf|bds?|beds?|bedrooms?|ba|baths?|bathrooms?|acres?|days?|mo|months?|yrs?|years?)\b)[A-Za-z0-9]/gi;
+  const m = re.exec(t);
+  return (m ? t.slice(m.index) : t).trim();
+}
 function parseListing(text){
   const t = String(text||'').replace(/\r/g,'').replace(/ /g,' ').replace(/[®™]/g,'');
   const f = {flags:[]}; let m;
 
   // address and area
   m = /(\d{1,6}[^\n,$]{2,60}),\s*([A-Za-z .'-]{3,30}?),\s*(?:AL|Alabama)\.?\s*(\d{5})?/i.exec(t);
-  if(m){ f.street=m[1].trim(); f.city=m[2].trim(); f.zip=m[3]||''; f.address=`${f.street}, ${f.city}, AL${f.zip?' '+f.zip:''}`; }
+  if(m){ f.street=cleanStreet(m[1]); f.city=m[2].trim(); f.zip=m[3]||''; f.address=`${f.street}, ${f.city}, AL${f.zip?' '+f.zip:''}`; }
   else { m = /\b([A-Za-z .'-]{3,30}?),\s*(?:AL|Alabama)\b\.?\s*(\d{5})?/i.exec(t); if(m){ f.city=m[1].trim().split(/\s{2,}|\n/).pop(); f.zip=m[2]||''; } }
   if(f.city){ f.areaId = areaForCity(f.city, t, f.zip); if(!f.areaId) f.areaId='other'; }
   else { for(const [re,id] of CITY_AREAS){ if(re.test(t)){ f.city = (t.match(re)||[''])[0]; f.areaId = id==='hoover' ? (/shelby county/i.test(t)?'hoovs':'hoovj') : id; break; } } }
@@ -592,6 +617,79 @@ function parseListing(text){
   return f;
 }
 
+/* ---------- ARV from sold comps ---------- */
+const MON3 = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+function parseDateLoose(str){
+  const t = String(str||'').trim(); let m;
+  if((m=/(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t))) return new Date(+m[1],+m[2]-1,+m[3]);
+  if((m=/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/.exec(t))){ let y=+m[3]; if(y<100) y+=2000; return new Date(y,+m[1]-1,+m[2]); }
+  if((m=/(\d{1,2})\/(\d{4})/.exec(t))) return new Date(+m[2],+m[1]-1,15);
+  if((m=/([A-Za-z]{3,9})\.?\s+(?:(\d{1,2}),?\s+)?(\d{4})/.exec(t))){ const i=MON3.indexOf(m[1].slice(0,3).toLowerCase()); if(i>=0) return new Date(+m[3],i,m[2]?+m[2]:15); }
+  return null;
+}
+function fmtDate(d){ return d ? `${d.getMonth()+1}/${d.getDate()}/${d.getFullYear()}` : ''; }
+function monthsAgo(d,today){ if(!d) return null; return Math.max(0,(today-d)/(1000*60*60*24*30.44)); }
+function parseComp(text){
+  const t = String(text||'').replace(/\r/g,'').replace(/ /g,' ').replace(/[®™]/g,'');
+  const f = parseListing(t); let m, price = null, date = null;
+  m = /\bsold[^\n$]{0,40}\$[ \t]?(\d[\d,]*(?:\.\d+)?)[ \t]?(k|m)?\b/i.exec(t);
+  if(m && toMoney(m[1],m[2])>=10000) price = toMoney(m[1],m[2]);
+  if(!price){ m = /(?:closed?|close|sale) price[ \t]*:?[ \t]*\n?[ \t]*\$[ \t]?(\d[\d,]*)/i.exec(t); if(m) price = toMoney(m[1]); }
+  if(!price) price = f.price || null;
+  m = /(?:sold|closed|close date|sale date|date sold)(?:[^\n]{0,30}?|[ \t]*:?[ \t]*\n[ \t]*)((?:\d{1,2}\/\d{1,2}\/\d{2,4})|(?:\d{4}-\d{2}-\d{2})|(?:[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}))/i.exec(t);
+  if(m) date = parseDateLoose(m[1]);
+  let reno = null;
+  if(/as[- ]is|investor special|handyman|fixer|needs (?:work|tlc|repairs|updating)|\btlc\b|cash only|estate sale|foreclos|bank[- ]owned/i.test(t)) reno = false;
+  else if(/renovat|remodel|fully updated|completely updated|totally updated|new (?:kitchen|roof|hvac|flooring|cabinets|countertops)|move[- ]in ready|\bflip|restored|like new|rehab(?:bed|ed)/i.test(t)) reno = true;
+  return {address: f.address || f.street || '', price, sqft: f.sqft||null, beds: f.beds||null, baths: f.baths||null,
+          date: date ? fmtDate(date) : '', reno, use: reno !== false};
+}
+function median(a){ if(!a.length) return NaN; const b=[...a].sort((x,y)=>x-y), k=b.length>>1; return b.length%2 ? b[k] : (b[k-1]+b[k])/2; }
+function pctl(a,q){ const b=[...a].sort((x,y)=>x-y); if(!b.length) return NaN; const i=(b.length-1)*q, lo=Math.floor(i), hi=Math.ceil(i); return b[lo]+(b[hi]-b[lo])*(i-lo); }
+function arvFromComps(subj, comps, adj, today){
+  today = today || new Date();
+  const rows = comps.map(c=>{
+    const r = {...c}, price=fin(c.price), sqft=fin(c.sqft);
+    r.valid = price>0 && sqft>0;
+    r.ppsf = r.valid ? price/sqft : NaN;
+    r.months = monthsAgo(parseDateLoose(c.date), today);
+    r.bedAdj = (subj.beds>0 && c.beds>0) ? (subj.beds-c.beds)*fin(adj.bed) : 0;
+    r.bathAdj = (subj.baths>0 && c.baths>0) ? (subj.baths-c.baths)*fin(adj.bath) : 0;
+    r.arv = r.valid && subj.sqft>0 ? r.ppsf*subj.sqft + r.bedAdj + r.bathAdj : NaN;
+    r.status = !c.use ? 'off' : !r.valid ? 'incomplete' : 'used';
+    return r;
+  });
+  let used = rows.filter(r=>r.status==='used');
+  if(used.length>=4){
+    const med = median(used.map(r=>r.ppsf));
+    used.forEach(r=>{ if(Math.abs(r.ppsf/med-1) > 0.25) r.status='outlier'; });
+    used = rows.filter(r=>r.status==='used');
+  }
+  const out = {rows, n:used.length, notes:[]};
+  if(!(subj.sqft>0)){ out.needSqft = true; return out; }
+  if(!used.length) return out;
+  const arvs = used.map(r=>r.arv);
+  out.mid = median(arvs);
+  out.low = used.length>=4 ? pctl(arvs,0.25) : Math.min(...arvs);
+  out.high = used.length>=4 ? pctl(arvs,0.75) : Math.max(...arvs);
+  out.ppsfMed = median(used.map(r=>r.ppsf));
+  out.spread = out.mid>0 ? (Math.max(...arvs)-Math.min(...arvs))/out.mid : 0;
+  const old = used.filter(r=>r.months!=null && r.months>6), noDate = used.filter(r=>r.months==null);
+  const sizeOff = used.filter(r=>Math.abs(fin(r.sqft)/subj.sqft-1)>0.25);
+  const unknown = used.filter(r=>r.reno==null);
+  const outl = rows.filter(r=>r.status==='outlier');
+  if(used.length<3) out.notes.push(['warn',`Only ${used.length} comp${used.length===1?'':'s'}. Three to five recent renovated sales make a solid ARV.`]);
+  if(old.length) out.notes.push(['warn',`${old.length} sold more than 6 months ago. Appraisers prefer the last 6 months, and older sales can miss price changes since.`]);
+  if(noDate.length) out.notes.push(['info',`${noDate.length} without a sale date. Add it so recency can be checked.`]);
+  if(sizeOff.length) out.notes.push(['warn',`${sizeOff.length} more than 25% bigger or smaller than the subject. Price per sq ft drops as houses get bigger, so these skew the result.`]);
+  if(out.spread>0.20) out.notes.push(['warn',`The comps disagree by ${Math.round(out.spread*100)}% of the middle value. Check for different neighborhoods, condition or a pool, garage or basement.`]);
+  if(unknown.length) out.notes.push(['info',`${unknown.length} not described as renovated. Check the photos and uncheck any that weren’t.`]);
+  if(outl.length) out.notes.push(['info',`${outl.length} left out as an outlier (price per sq ft more than 25% from the median).`]);
+  out.conf = used.length>=3 && !old.length && !noDate.length && out.spread<=0.15 && !sizeOff.length ? 'pass' : used.length>=2 ? 'warn' : 'fail';
+  out.confWord = {pass:'Solid',warn:'Use with care',fail:'Weak'}[out.conf];
+  return out;
+}
+
 /* ---------- 5-year projection ---------- */
 function project(s,R){
   const ap=fin(s.appr)/100, rg=fin(s.rentG)/100, eg=fin(s.expG)/100, o=R.ops;
@@ -654,9 +752,23 @@ document.getElementById('inputs').innerHTML = [
     `<div class="fields">
       <div class="fld"><label for="beds">Bedrooms</label><div class="inp"><select id="beds" style="flex:1;border:0;background:transparent"><option value="2">2 bedrooms</option><option value="3">3 bedrooms</option><option value="4">4 bedrooms</option></select></div></div>
       ${fld('price','Purchase price',{pre:'$'})}
-      ${fld('arv','After-repair value (ARV)',{pre:'$',hint:'Appraised value once the work is done'})}
+      ${fld('arv','After-repair value (ARV)',{pre:'$',hint:'Appraised value once the work is done. <button type="button" class="linkish" id="toComps">Estimate from sold comps</button>'})}
       ${fld('mills','Total property tax millage',{suf:'mills',auto:true,hint:'Area default'})}
     </div>`),
+  `<details class="card lf comps" id="compSec" data-mode="both"><summary><h2>ARV from sold comps</h2><span class="tw"><span class="o">Show</span><span class="c">Hide</span></span></summary>
+    <span class="help">On Zillow or Redfin, filter to <b>Sold</b> in the last 6 months, within about ½ mile, with similar size and bedrooms. Open each house that looks renovated in the photos, copy the page and paste it here. Three to five comps is the goal.</span>
+    <div class="fields" style="margin-bottom:12px">
+      ${fld('subjSqft','Subject house size',{suf:'sq ft',hint:'Filled from a pasted listing'})}
+      ${fld('subjBeds','Subject bedrooms',{suf:'bd'})}
+      ${fld('subjBaths','Subject baths (after rehab)',{suf:'ba'})}
+      ${fld('adjBed','Value per bedroom',{pre:'$',hint:'Adjusts comps with more or fewer; 0 to skip'})}
+      ${fld('adjBath','Value per bathroom',{pre:'$',hint:'Adjusts comps with more or fewer; 0 to skip'})}
+    </div>
+    <textarea id="compText" rows="4" spellcheck="false" aria-label="Paste a sold listing" placeholder="Paste one sold listing at a time, e.g.&#10;Sold: $205,000  Sold on 08/12/26&#10;3 bd 2 ba 1,210 sqft&#10;1301 44th St N, Birmingham, AL 35222&#10;Fully renovated..."></textarea>
+    <div class="acts"><button type="button" class="btn primary" id="compAdd">Add comp</button><button type="button" class="btn" id="compBlank">Add a row by hand</button><button type="button" class="btn" id="compClearAll">Remove all</button></div>
+    <div id="compTable"></div>
+    <div id="compResult"></div>
+  </details>`,
   card('secRehab','both','Rehab budget','',
     `<div class="row"><span class="lbl">Estimate as</span>${seg('rehabMode',[['lump','One lump sum'],['items','Line items']],'sm')}</div>
      <div class="fields" id="rehabLumpBox">${fld('rehabLump','Rehab budget',{pre:'$'})}${fld('contPct','Contingency',{suf:'%',hint:'10–15% is typical'})}</div>
@@ -751,7 +863,8 @@ const DEFAULTS = {
   roomsRented:'2', myRooms:'1', roomVac:'5', util:'350', utilSplit:'equal', hhOther:'0',
   vac:'8', maint:'8', capex:'8', otherMo:'0', mgmt:'self', pmPct:'10', leaseFee:'50', leasesPerYear:'0.5',
   maxHousing:'500', rule70:'70', maxCashLeft:'10000', minCF:'200', minDSCR:'1.20', minCoC:'8',
-  appr:'3', rentG:'2.5', expG:'3.5', hhScen:'live'
+  appr:'3', rentG:'2.5', expG:'3.5', hhScen:'live',
+  subjSqft:'', subjBeds:'', subjBaths:'', adjBed:'7500', adjBath:'5000'
 };
 ITEMS.forEach(([k])=>DEFAULTS['ri_'+k]='');
 const SAMPLE = {price:'110000', arv:'190000', rehabLump:'45000', ov:{rent:1650}};
@@ -895,6 +1008,7 @@ function summaryText(s,R,V){
   const L=[]; const isHH=R.mode==='hh';
   L.push(`${isHH?'HOUSE HACK':'BRRRR'} DEAL SUMMARY · ${R.area.name}, AL · ${R.beds} BR`);
   const lf=LISTING.facts; if(lf&&lf.address) L.push(`Property: ${lf.address}${lf.sqft?` · ${lf.sqft.toLocaleString('en-US')} sq ft`:''}${lf.year?` · built ${lf.year}`:''}`);
+  if(LAST_ARV&&LAST_ARV.n) L.push(`ARV from ${LAST_ARV.n} sold comps: ${$(Math.round(LAST_ARV.low/1000)*1000)} – ${$(Math.round(LAST_ARV.high/1000)*1000)}, middle ${$(Math.round(LAST_ARV.mid/1000)*1000)} (${LAST_ARV.confWord.toLowerCase()})`);
   if(lf&&lf.flags.length) L.push(`Listing flags: ${lf.flags.map(x=>x[1]).join('; ')}`);
   L.push(`Verdict: ${V.word.toUpperCase()} · ${V.why}`);
   L.push('');
@@ -1070,6 +1184,7 @@ function update(){
   }
   renderAreaBar(R);
   renderFound();
+  renderCompResult(s);
   renderResults(s,R,V);
   renderProjection(s,R);
   clearTimeout(SAVE_T); SAVE_T=setTimeout(save,400);
@@ -1088,6 +1203,10 @@ function applyListing(f){
     ['arv','rehabLump',...ITEMS.map(([k])=>'ri_'+k)].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   }
   if(f.rent>0) OV.rent = f.rent;
+  if(f.price>0){ COMPS=[]; ['subjSqft','subjBeds','subjBaths'].forEach(id=>{ document.getElementById(id).value=''; }); }
+  if(f.sqft) document.getElementById('subjSqft').value = fmtIn(f.sqft);
+  if(f.beds) document.getElementById('subjBeds').value = f.beds;
+  if(f.baths) document.getElementById('subjBaths').value = f.baths;
   if(typeof f.hoa==='number') set('otherMo', Math.round(f.hoa));
   if(f.price>0 || f.cashOnly){ const el=document.getElementById(f.cashOnly?'finMode_cash':'finMode_loan'); if(el) el.checked=true; }
 }
@@ -1123,7 +1242,7 @@ function readListing(){
   if(!txt.trim()){ toast('Paste a listing first'); return; }
   const f=parseListing(txt);
   LISTING={text:txt, facts:f};
-  applyListing(f); update();
+  applyListing(f); renderCompTable(); update();
   const n=['price','beds','areaId','rent'].filter(k=>f[k]).length;
   toast(`Read ${n} of 4 key details. Now enter ARV and rehab.`);
   clearTimeout(SAVE_T); save();
@@ -1131,7 +1250,81 @@ function readListing(){
 document.getElementById('lfRead').addEventListener('click',readListing);
 document.getElementById('lfText').addEventListener('paste',()=>setTimeout(readListing,0));
 document.getElementById('lfClear').addEventListener('click',()=>{ LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; update(); toast('Listing cleared'); });
-function clearListing(){ LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; }
+function clearListing(){ COMPS=[]; renderCompTable(); LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; }
+
+/* ---------- comps ---------- */
+let COMPS = [];
+let LAST_ARV = null;
+function subjectOf(s){
+  const lf = LISTING.facts || {};
+  return {sqft: s.subjSqft || lf.sqft || 0, beds: s.subjBeds || s.beds || 0, baths: s.subjBaths || lf.baths || 0};
+}
+function renderCompTable(){
+  const el = document.getElementById('compTable');
+  if(!COMPS.length){ el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="scroll" style="margin-top:12px"><table><thead><tr><th title="Count this comp">Use</th><th>Address</th><th>Sold price</th><th>Sq ft</th><th>Bd</th><th>Ba</th><th>Sold on</th><th>$/sq ft</th><th>ARV for subject</th><th></th><th></th></tr></thead><tbody>
+    ${COMPS.map((c,i)=>`<tr data-i="${i}">
+      <td><input type="checkbox" data-k="use" aria-label="Use comp ${i+1}" ${c.use?'checked':''}></td>
+      <td><input type="text" class="addr" data-k="address" value="${escapeHTML(c.address||'')}" aria-label="Address"></td>
+      <td><input type="text" inputmode="decimal" data-k="price" value="${c.price?fmtIn(c.price):''}" aria-label="Sold price"></td>
+      <td><input type="text" inputmode="decimal" data-k="sqft" value="${c.sqft?fmtIn(c.sqft):''}" aria-label="Square feet"></td>
+      <td><input type="text" inputmode="decimal" class="sm" data-k="beds" value="${c.beds??''}" aria-label="Bedrooms"></td>
+      <td><input type="text" inputmode="decimal" class="sm" data-k="baths" value="${c.baths??''}" aria-label="Baths"></td>
+      <td><input type="text" data-k="date" value="${escapeHTML(c.date||'')}" placeholder="MM/DD/YYYY" aria-label="Sold date"></td>
+      <td id="cp_ppsf_${i}"></td><td id="cp_arv_${i}"></td><td id="cp_st_${i}"></td>
+      <td><button type="button" class="xbtn" data-del="${i}" aria-label="Remove comp ${i+1}">×</button></td></tr>`).join('')}
+    </tbody></table></div>`;
+}
+function renderCompResult(s){
+  const subj = subjectOf(s), R = arvFromComps(subj, COMPS, {bed:s.adjBed, bath:s.adjBath});
+  LAST_ARV = R;
+  R.rows.forEach((r,i)=>{
+    const a=document.getElementById('cp_ppsf_'+i), b=document.getElementById('cp_arv_'+i), c=document.getElementById('cp_st_'+i);
+    if(!a) return;
+    a.textContent = isFinite(r.ppsf) ? $(r.ppsf) : '—';
+    b.textContent = isFinite(r.arv) ? $(r.arv) : '—';
+    b.title = (r.bedAdj||r.bathAdj) ? `Includes ${r.bedAdj?$(r.bedAdj)+' bedroom':''}${r.bedAdj&&r.bathAdj?' and ':''}${r.bathAdj?$(r.bathAdj)+' bath':''} adjustment` : '';
+    const lbl = {used:'Used', outlier:'Outlier', incomplete:'Needs price + sq ft', off:r.reno===false?'Not renovated':'Off'}[r.status];
+    c.innerHTML = `<span class="st ${r.status}">${lbl}</span>${r.months!=null && r.months>6 ? ' <span class="st outlier">Old</span>':''}`;
+    const tr = a.closest('tr'); tr.classList.toggle('off', r.status!=='used');
+  });
+  const el = document.getElementById('compResult');
+  if(!COMPS.length){ el.innerHTML = '<div class="callout">No comps yet. Paste a sold listing above, or add one by hand.</div>'; return; }
+  if(R.needSqft){ el.innerHTML = '<div class="callout warn">Enter the subject house’s square feet to turn the comps into an ARV.</div>'; return; }
+  if(!R.n){ el.innerHTML = '<div class="callout warn">No usable comps. Each one needs a sold price and square feet, and Use checked.</div>'; return; }
+  const r1k = x=>Math.round(x/1000)*1000;
+  el.innerHTML = `<div class="arvout"><div><span>Low</span><b>${$(r1k(R.low))}</b></div><div class="mid"><span>Middle</span><b>${$(r1k(R.mid))}</b></div><div><span>High</span><b>${$(r1k(R.high))}</b></div></div>
+    <div class="row" style="margin:10px 0 0"><span class="chip ${R.conf}">${R.confWord} · ${R.n} comp${R.n===1?'':'s'} · ${$(R.ppsfMed)}/sq ft median</span></div>
+    <div class="small" style="margin-top:6px">Each comp’s price per sq ft × ${fmtIn(subj.sqft)} sq ft${(fin(s.adjBed)||fin(s.adjBath))?', adjusted for bedroom and bath differences':''}. ${R.n>=4?'Low and high are the 25th and 75th percentiles.':'Low and high are the lowest and highest comp.'}</div>
+    ${R.notes.length?`<div class="lflags">${R.notes.map(([l,t])=>`<div class="lflag ${l}">${t}</div>`).join('')}</div>`:''}
+    <div class="acts" style="margin-top:10px"><button type="button" class="btn primary" id="useMid">Use ${$(r1k(R.mid))} as ARV</button><button type="button" class="btn" id="useLow">Use low: ${$(r1k(R.low))}</button></div>`;
+  document.getElementById('useMid').onclick = ()=>setArv(r1k(R.mid));
+  document.getElementById('useLow').onclick = ()=>setArv(r1k(R.low));
+}
+function setArv(v){ document.getElementById('arv').value = fmtIn(v); update(); toast(`ARV set to ${$(v)}`); }
+function addCompFromText(){
+  const el=document.getElementById('compText'), txt=el.value;
+  if(!txt.trim()){ toast('Paste a sold listing first'); return; }
+  const c = parseComp(txt);
+  if(!c.price && !c.sqft){ toast('Couldn’t find a sold price or size. Add the row by hand.'); return; }
+  COMPS.push(c); el.value='';
+  renderCompTable(); update();
+  toast(`Added comp ${COMPS.length}${c.reno===false?' (not renovated, so unchecked)':''}`);
+}
+document.getElementById('compAdd').addEventListener('click', addCompFromText);
+document.getElementById('compText').addEventListener('paste', ()=>setTimeout(addCompFromText,0));
+document.getElementById('compBlank').addEventListener('click', ()=>{ COMPS.push({address:'',price:null,sqft:null,beds:null,baths:null,date:'',reno:null,use:true}); renderCompTable(); update(); });
+document.getElementById('compClearAll').addEventListener('click', ()=>{ COMPS=[]; renderCompTable(); update(); });
+document.getElementById('compTable').addEventListener('input', e=>{
+  const tr=e.target.closest('tr[data-i]'); if(!tr) return; const c=COMPS[+tr.dataset.i], k=e.target.dataset.k; if(!c||!k) return;
+  if(k==='use') c.use = e.target.checked;
+  else if(k==='address'||k==='date') c[k] = e.target.value;
+  else { const p=parseNum(e.target.value); c[k] = p.blank||p.bad ? null : p.v; }
+  update();
+});
+document.getElementById('compTable').addEventListener('change', e=>{ if(e.target.dataset.k==='use'){ COMPS[+e.target.closest('tr').dataset.i].use=e.target.checked; update(); } });
+document.getElementById('compTable').addEventListener('click', e=>{ const b=e.target.closest('[data-del]'); if(!b) return; COMPS.splice(+b.dataset.del,1); renderCompTable(); update(); });
+document.getElementById('toComps').addEventListener('click', ()=>{ const d=document.getElementById('compSec'); d.open=true; d.scrollIntoView({behavior:'smooth',block:'start'}); });
 
 /* ---------- persistence (per-viewer convenience only) ---------- */
 const KEY='bham-brrrr-v1';
@@ -1140,17 +1333,17 @@ function save(){
     const vals={}; RADIOS.forEach(n=>vals[n]=getRadio(n));
     SELECTS.forEach(id=>{ const el=document.getElementById(id); if(el) vals[id]=el.value; });
     Object.keys(FIELDS).forEach(id=>{ if(!AUTO_KEYS.includes(id)) { const el=document.getElementById(id); if(el) vals[id]=el.value; } });
-    localStorage.setItem(KEY, JSON.stringify({vals,ov:OV,listing:LISTING}));
+    localStorage.setItem(KEY, JSON.stringify({vals,ov:OV,listing:LISTING,comps:COMPS}));
   }catch(e){}
 }
 function restore(){
-  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); if(d.listing&&d.listing.text){ LISTING=d.listing; document.getElementById('lfText').value=LISTING.text; } return true; }catch(e){ return false; }
+  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); if(Array.isArray(d.comps)) COMPS=d.comps; if(d.listing&&d.listing.text){ LISTING=d.listing; document.getElementById('lfText').value=LISTING.text; } return true; }catch(e){ return false; }
 }
 
 /* ---------- events ---------- */
 document.getElementById('inputs').addEventListener('input',e=>{
   const id=e.target.id;
-  if(id==='lfText') return;
+  if(id==='lfText'||id==='compText'||e.target.closest('#compTable')) return;
   if(AUTO_KEYS.includes(id)){ const p=parseNum(e.target.value); if(p.blank||p.bad) delete OV[id]; else OV[id]=p.v; }
   if(id==='contPct'){ document.getElementById('contPct2').value=e.target.value; }
   if(id==='contPct2'){ document.getElementById('contPct').value=e.target.value; }
@@ -1173,6 +1366,7 @@ document.getElementById('proj').addEventListener('toggle',update);
 applyValues(DEFAULTS);
 if(!restore()) loadSample();
 renderAssumptions();
+renderCompTable();
 update();
 </script>
 </body>
