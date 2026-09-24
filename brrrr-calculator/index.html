@@ -1,0 +1,975 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Birmingham BRRRR Calculator</title>
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+:root{
+  --bg:#F3F5F7; --surface:#FFFFFF; --sunk:#F7F9FA; --ink:#17202A; --muted:#5A6573; --faint:#8893A0;
+  --line:#DCE1E7; --line-strong:#C3CBD4;
+  --accent:#2A62A8; --accent-ink:#FFFFFF; --accent-soft:#E7EEF7;
+  --c1:#2A62A8; --c2:#A8712A; --band:rgba(42,98,168,.12);
+  --pass:#1E7F46; --pass-bg:#E3F3E9; --warn:#8F6207; --warn-bg:#FBF0D6; --fail:#B3372E; --fail-bg:#FBE6E3;
+  --shadow:0 1px 2px rgba(23,32,42,.06),0 4px 16px rgba(23,32,42,.05);
+  --font:ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --bg:#0F141A; --surface:#171E26; --sunk:#131920; --ink:#E5EAF0; --muted:#9DA8B5; --faint:#6F7B88;
+    --line:#27313C; --line-strong:#364250;
+    --accent:#5B93D9; --accent-ink:#0F141A; --accent-soft:#1B2A3B;
+    --c1:#5B93D9; --c2:#B98039; --band:rgba(91,147,217,.16);
+    --pass:#5CC98A; --pass-bg:#15301F; --warn:#E3B34F; --warn-bg:#33290F; --fail:#F2786E; --fail-bg:#3A1C1A;
+    --shadow:0 1px 2px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#0F141A; --surface:#171E26; --sunk:#131920; --ink:#E5EAF0; --muted:#9DA8B5; --faint:#6F7B88;
+  --line:#27313C; --line-strong:#364250;
+  --accent:#5B93D9; --accent-ink:#0F141A; --accent-soft:#1B2A3B;
+  --c1:#5B93D9; --c2:#B98039; --band:rgba(91,147,217,.16);
+  --pass:#5CC98A; --pass-bg:#15301F; --warn:#E3B34F; --warn-bg:#33290F; --fail:#F2786E; --fail-bg:#3A1C1A;
+  --shadow:0 1px 2px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--font);font-size:14px;line-height:1.45}
+.wrap{max-width:1240px;margin:0 auto;padding-inline:16px;padding-block:20px 96px}
+h1,h2,h3{text-wrap:balance;margin:0}
+h1{font-size:22px;letter-spacing:-.01em}
+h2{font-size:15px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:600}
+a{color:var(--accent)}
+.num,td,.v,input{font-variant-numeric:tabular-nums}
+button,select,input{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-end;justify-content:space-between;margin-bottom:16px}
+.top .sub{color:var(--muted);margin-top:4px;max-width:60ch}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+.seg{position:relative;display:inline-flex;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:3px;gap:2px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg label{padding:6px 12px;border-radius:6px;cursor:pointer;font-weight:600;color:var(--muted);white-space:nowrap}
+.seg input:checked+label{background:var(--accent);color:var(--accent-ink)}
+.seg input:focus-visible+label{outline:2px solid var(--accent);outline-offset:1px}
+.seg.sm label{padding:4px 10px;font-size:13px}
+.ctl{display:flex;flex-direction:column;gap:4px}
+.ctl>span{font-size:12px;color:var(--muted);font-weight:600}
+select{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:7px 10px;min-height:36px}
+.btn{background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;min-height:36px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{color:var(--accent-ink);filter:brightness(1.08)}
+.areabar{display:flex;flex-wrap:wrap;gap:6px 16px;align-items:center;background:var(--accent-soft);border-radius:10px;padding:10px 14px;margin-bottom:16px;color:var(--ink)}
+.areabar b{font-weight:650}
+.areabar .note{color:var(--muted);font-size:13px}
+
+/* layout */
+.grid{display:grid;grid-template-columns:minmax(0,1fr);gap:16px;align-items:start}
+@media (min-width:1000px){
+  .grid{grid-template-columns:minmax(0,1fr) 420px}
+  .results{position:sticky;top:calc(env(safe-area-inset-top,0px) + 12px);max-height:calc(100vh - 24px);overflow:auto}
+}
+.inputs{display:flex;flex-direction:column;gap:14px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:16px}
+.card>header{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px;margin-bottom:12px}
+.card>header p{margin:0;color:var(--muted);font-size:13px;flex-basis:100%}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px 14px}
+.fld{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fld label{font-size:12.5px;font-weight:600;color:var(--muted);display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.inp{display:flex;align-items:center;background:var(--sunk);border:1px solid var(--line-strong);border-radius:8px;overflow:hidden;min-height:38px}
+.inp:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.inp input{flex:1;min-width:0;border:0;background:transparent;padding:8px 8px;outline:none;font-size:15px}
+.inp .pre,.inp .suf{color:var(--faint);padding:0 8px;font-size:13px;white-space:nowrap}
+.inp .pre{padding-right:0}
+.inp select{border:0;border-left:1px solid var(--line);border-radius:0;background:var(--surface);min-height:36px;padding:4px 6px}
+.inp.bad{border-color:var(--fail)}
+.fld .hint{font-size:12px;color:var(--faint)}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;border-radius:4px;padding:1px 5px;background:var(--accent-soft);color:var(--accent)}
+button.tag{border:0;cursor:pointer;background:var(--warn-bg);color:var(--warn)}
+button.tag:hover{text-decoration:underline}
+.readout{display:flex;justify-content:space-between;gap:8px;background:var(--sunk);border:1px dashed var(--line-strong);border-radius:8px;padding:8px 10px;font-size:13px;color:var(--muted)}
+.readout b{color:var(--ink)}
+.callout{font-size:13px;border-radius:8px;padding:9px 12px;background:var(--sunk);border:1px solid var(--line);color:var(--muted);margin-top:12px}
+.callout.warn{background:var(--warn-bg);border-color:transparent;color:var(--ink)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
+.row .lbl{font-size:12.5px;font-weight:600;color:var(--muted)}
+.items{margin-top:12px}
+
+/* results */
+.results{display:flex;flex-direction:column;gap:12px}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:var(--shadow)}
+.verdict{display:flex;flex-direction:column;gap:8px}
+.verdict .line{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.pill{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:4px 12px;font-weight:750;letter-spacing:.04em;font-size:13px}
+.pill.pass{background:var(--pass-bg);color:var(--pass)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.fail{background:var(--fail-bg);color:var(--fail)}
+.pill.none{background:var(--sunk);color:var(--muted)}
+.verdict .why{font-size:14.5px}
+.stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.stat{background:var(--surface);padding:10px 12px;min-width:0}
+.stat .k{font-size:12px;color:var(--muted);font-weight:600}
+.stat .v{font-size:19px;font-weight:700;margin-top:2px;overflow-wrap:anywhere}
+.stat .s{font-size:12px;color:var(--faint);margin-top:2px}
+.stat.wide{grid-column:1/-1}
+.stat.hero .v{font-size:26px}
+.v.pos{color:var(--pass)} .v.neg{color:var(--fail)}
+.chip{display:inline-flex;align-items:center;gap:6px;border-radius:8px;padding:6px 10px;font-weight:650;font-size:13px}
+.chip.pass{background:var(--pass-bg);color:var(--pass)}
+.chip.warn{background:var(--warn-bg);color:var(--warn)}
+.chip.fail{background:var(--fail-bg);color:var(--fail)}
+.tests{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.test{border:1px solid var(--line);border-left-width:4px;border-radius:8px;padding:9px 11px}
+.test.pass{border-left-color:var(--pass)} .test.fail{border-left-color:var(--fail)}
+.test .th{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.test .nm{font-weight:650}
+.test .st{font-size:12px;font-weight:750;letter-spacing:.04em}
+.test.pass .st{color:var(--pass)} .test.fail .st{color:var(--fail)}
+.test .dt{font-size:13px;color:var(--muted);margin-top:2px}
+.test .fix{margin-top:6px;font-size:13px;display:flex;flex-direction:column;gap:2px}
+.test .fix div::before{content:"→ ";color:var(--faint)}
+.test .fix b{color:var(--ink)}
+.sectionhead{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:8px}
+details.more summary{cursor:pointer;font-weight:600;color:var(--accent);padding:2px 0}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{text-align:right;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--muted);font-weight:600;font-size:12px}
+td.neg{color:var(--fail)}
+.bd td{padding:4px 2px}
+.bd tr.tot td{font-weight:700;border-bottom:0}
+.scroll{overflow-x:auto}
+
+/* projection */
+.proj{margin-top:16px}
+.proj>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.proj>summary::-webkit-details-marker{display:none}
+.proj>summary .tw{color:var(--accent);font-weight:650;font-size:13px}
+.proj[open]>summary .tw .o{display:none}
+.proj:not([open])>summary .tw .c{display:none}
+.chartwrap{position:relative;margin-top:14px}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:12px}
+.legend i{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+.legend i.band{height:10px;background:var(--band)}
+svg text{fill:var(--muted);font-size:11px;font-family:var(--font)}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;padding:8px 10px;font-size:12.5px;box-shadow:var(--shadow);min-width:170px}
+.tip div{display:flex;justify-content:space-between;gap:12px}
+.tip .h{font-weight:700;margin-bottom:4px}
+
+/* assumptions */
+.assume{margin-top:16px}
+.assume table td,.assume table th{white-space:normal;text-align:left;vertical-align:top}
+.assume td.n{white-space:nowrap}
+.small{font-size:12.5px;color:var(--muted)}
+.disclaimer{margin-top:16px;font-size:12.5px;color:var(--muted);max-width:80ch}
+
+/* mobile bar */
+.mbar{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line-strong);padding:10px 16px calc(10px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:5}
+.mbar .m{font-size:13px;color:var(--muted)}
+.mbar .m b{color:var(--ink)}
+@media (min-width:1000px){.mbar{display:none}}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(76px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-weight:600;z-index:6}
+#copyFallback{width:100%;min-height:160px;font-family:var(--mono);font-size:12px;margin-top:8px;background:var(--sunk);color:var(--ink);border:1px solid var(--line-strong);border-radius:8px;padding:8px}
+@media (prefers-reduced-motion:no-preference){.inp,.btn{transition:border-color .15s,box-shadow .15s}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Birmingham BRRRR Calculator</h1>
+      <div class="sub">Buy, rehab, rent, refinance, repeat — or house hack — with Birmingham-metro tax, insurance and rent defaults. Results update as you type.</div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><span>Mode</span>
+        <div class="seg" role="radiogroup" aria-label="Mode">
+          <input type="radio" name="mode" id="mode_brrrr" value="brrrr" checked><label for="mode_brrrr">BRRRR</label>
+          <input type="radio" name="mode" id="mode_hh" value="hh"><label for="mode_hh">House Hack</label>
+        </div>
+      </div>
+      <label class="ctl"><span>Area</span><select id="area"></select></label>
+      <button class="btn" id="btnSample" type="button">Load sample deal</button>
+      <button class="btn" id="btnNew" type="button">New deal</button>
+    </div>
+  </div>
+  <div class="areabar" id="areabar"></div>
+
+  <div class="grid">
+    <div class="inputs" id="inputs"></div>
+    <aside class="results" id="resultsCol" aria-live="polite">
+      <div id="results"></div>
+    </aside>
+  </div>
+
+  <details class="card proj" id="proj">
+    <summary><h2>5-year projection</h2><span class="tw"><span class="o">Show</span><span class="c">Hide</span></span></summary>
+    <div id="projBody" style="margin-top:14px"></div>
+  </details>
+
+  <section class="card assume" id="assume"></section>
+
+  <p class="disclaimer">This page is an analysis tool, not financial, tax, legal or lending advice. Defaults are estimates for the Birmingham metro from public sources and will drift. Confirm taxes with the Jefferson or Shelby County tax assessor, insurance with a quote, rents with local comps, and loan terms with your lender before you commit money.</p>
+</div>
+
+<div class="mbar" id="mbar"></div>
+
+<script id="engine">
+/* ================= DATA ================= */
+const RESEARCHED = 'Sep 24, 2026';
+const ITEMS = [['roof','Roof'],['hvac','HVAC'],['plumb','Plumbing'],['elec','Electrical'],['kitchen','Kitchen'],['baths','Baths'],['floor','Flooring'],['paint','Paint'],['ext','Exterior / landscaping'],['struct','Foundation / structural'],['permits','Permits'],['other','Other']];
+// mills = total 2025 millage; basis: reported | derived | estimate; rf = rent factor vs HUD metro FMR; ins = homeowner premium per $1,000 of dwelling value
+const AREAS = [
+  {id:'bham',  name:'Birmingham (city)',     county:'Jefferson', mills:72.5, basis:'derived',  rf:0.95, ins:9.0},
+  {id:'truss', name:'Trussville',            county:'Jefferson', mills:62.1, basis:'reported', rf:1.10, ins:7.8},
+  {id:'leeds', name:'Leeds',                 county:'Jefferson', mills:60.0, basis:'estimate', rf:0.95, ins:8.2},
+  {id:'iron',  name:'Irondale',              county:'Jefferson', mills:62.6, basis:'derived',  rf:0.97, ins:8.4},
+  {id:'cp',    name:'Center Point',          county:'Jefferson', mills:50.1, basis:'estimate', rf:0.90, ins:8.8},
+  {id:'fult',  name:'Fultondale',            county:'Jefferson', mills:55.1, basis:'derived',  rf:0.97, ins:8.2},
+  {id:'gard',  name:'Gardendale',            county:'Jefferson', mills:60.1, basis:'reported', rf:1.00, ins:8.0},
+  {id:'bess',  name:'Bessemer',              county:'Jefferson', mills:68.7, basis:'reported', rf:0.85, ins:9.2},
+  {id:'home',  name:'Homewood',              county:'Jefferson', mills:75.0, basis:'reported', rf:1.25, ins:8.0},
+  {id:'vest',  name:'Vestavia Hills',        county:'Jefferson', mills:92.6, basis:'reported', rf:1.30, ins:7.8},
+  {id:'hoovj', name:'Hoover (Jefferson Co.)',county:'Jefferson', mills:72.6, basis:'reported', rf:1.18, ins:7.8},
+  {id:'hoovs', name:'Hoover (Shelby Co.)',   county:'Shelby',    mills:66.5, basis:'derived',  rf:1.18, ins:7.8},
+  {id:'pel',   name:'Pelham',                county:'Shelby',    mills:58.0, basis:'derived',  rf:1.08, ins:7.8},
+  {id:'alab',  name:'Alabaster',             county:'Shelby',    mills:54.0, basis:'derived',  rf:1.05, ins:7.8},
+  {id:'chel',  name:'Chelsea',               county:'Shelby',    mills:44.0, basis:'derived',  rf:1.10, ins:7.6},
+  {id:'other', name:'Other (manual)',        county:'—',         mills:60.0, basis:'placeholder', rf:1.00, ins:8.5}
+];
+const FMR = {2:1266, 3:1583, 4:1801};      // HUD FY2026 Fair Market Rent, Birmingham-Hoover HMFA
+const LL_MULT = 1.10;                      // landlord (DP-3) premium vs homeowner (HO-3), same dwelling
+const ROOM_PREMIUM = 1.15;                 // per-room rent vs. whole-house rent / bedrooms
+const CLASS_II = 0.20, CLASS_III = 0.10;   // Alabama assessment ratios
+
+/* ================= MATH ================= */
+function areaOf(id){ return AREAS.find(a=>a.id===id) || AREAS[AREAS.length-1]; }
+function r25(x){ return Math.round(x/25)*25; }
+function clamp(x,a,b){ return Math.min(b,Math.max(a,x)); }
+function fin(x){ return typeof x==='number' && isFinite(x) ? x : 0; }
+function pmt(r,n,L){ if(!(L>0)||!(n>0)) return 0; if(!r) return L/n; return L*r/(1-Math.pow(1+r,-n)); }
+function bal(L,r,n,k){
+  if(!(L>0)) return 0; if(!(n>0)) return L;
+  k = clamp(k,0,n); if(!r) return L*(1-k/n);
+  const p = pmt(r,n,L), g = Math.pow(1+r,k);
+  return Math.max(0, L*g - p*(g-1)/r);
+}
+function pick(s,k,auto){ const v = s.ov ? s.ov[k] : undefined; return (typeof v==='number' && isFinite(v)) ? v : auto; }
+function cc(val,unit,base){ return unit==='$' ? fin(val) : fin(base)*fin(val)/100; }
+
+function rentalOps(s,rent,tax,ins){
+  const v=fin(s.vac)/100, m=fin(s.maint)/100, c=fin(s.capex)/100;
+  const pm = s.mgmt==='pm' ? fin(s.pmPct)/100 : 0;
+  const lf = s.mgmt==='pm' ? fin(s.leaseFee)/100*fin(s.leasesPerYear)/12 : 0;
+  const vac=rent*v, eff=rent-vac, maint=rent*m, capex=rent*c, mgmt=eff*pm, leasing=rent*lf, other=fin(s.otherMo);
+  const noi = eff - maint - capex - mgmt - leasing - tax - ins - other;
+  const k = (1-v) - m - c - pm*(1-v) - lf;   // cash flow per $1 of rent
+  return {rent,vac,eff,maint,capex,mgmt,leasing,tax,ins,other,noi,k,fixed:tax+ins+other};
+}
+
+function calc(s){
+  const a = areaOf(s.area), A = {};
+  A.mills = a.mills; const mills = Math.max(0, pick(s,'mills',A.mills));
+  const beds = [2,3,4].includes(s.beds) ? s.beds : 3;
+  A.rent = r25(FMR[beds]*a.rf); const rent = Math.max(0, pick(s,'rent',A.rent));
+  const P = Math.max(0,fin(s.price)), ARV = Math.max(0,fin(s.arv));
+  const rehabBase = Math.max(0, s.rehabBaseOv!=null ? s.rehabBaseOv
+      : (s.rehabMode==='items' ? ITEMS.reduce((t,[k])=>t+fin(s['ri_'+k]),0) : fin(s.rehabLump)));
+  const rehab = rehabBase*(1+Math.max(0,fin(s.contPct))/100);
+  const insHO = a.ins, insLL = a.ins*LL_MULT;
+  A.rentTax = ARV*CLASS_II*mills/1000/12; const tax = pick(s,'rentTax',A.rentTax);
+  A.rentIns = ARV*insLL/1000/12;           const ins = pick(s,'rentIns',A.rentIns);
+  const ops = rentalOps(s,rent,tax,ins);
+  const R = {mode:s.mode, area:a, auto:A, mills, beds, rent, P, ARV, rehabBase, rehab, ops, incomplete: !(P>0 && ARV>0)};
+  return s.mode==='hh' ? calcHH(s,R,insHO) : calcB(s,R,insLL);
+}
+
+function cocOf(cf,cashLeft){ return cashLeft>0 ? cf*12/cashLeft*100 : (cf>0?Infinity:(cf<0?-Infinity:0)); }
+function cocPass(cf,cashLeft,t){ return cashLeft>0 ? cf*12/cashLeft*100 >= t : cf>0; }
+function dscrOf(noi,ds){ return ds>0 ? noi/ds : (noi>0?Infinity:0); }
+
+function calcB(s,R,insLL){
+  const {P,ARV,auto:A} = R;
+  const closeP = cc(s.closeVal,s.closeUnit,P);
+  const cash = s.finMode==='cash';
+  const loan = cash ? 0 : P*(1-clamp(fin(s.downPct),0,100)/100);
+  const down = P-loan;
+  const r = fin(s.rate)/1200, n = Math.round(fin(s.term)*12);
+  const pi = pmt(r,n,loan);
+  const m = Math.max(0,fin(s.holdMonths));
+  A.holdTax = P*CLASS_II*R.mills/1000/12; const hTax = pick(s,'holdTax',A.holdTax);
+  A.holdIns = (P+R.rehab)*insLL/1000/12;  const hIns = pick(s,'holdIns',A.holdIns);
+  const hUtil = fin(s.holdUtil);
+  const hLoan = pi*m, hPrin = loan - bal(loan,r,n,m), hInt = hLoan - hPrin;
+  const holding = (hTax+hIns+hUtil)*m + hLoan;
+  const holdingCost = (hTax+hIns+hUtil)*m + hInt;
+  const cashIn = down + closeP + R.rehab + holding;
+  const refiMonth = Math.max(m, fin(s.seasoning));
+  const payoff = bal(loan,r,n,refiMonth);
+  const newLoan = ARV*Math.max(0,fin(s.ltv))/100;
+  const refiClose = cc(s.refiCloseVal,s.refiCloseUnit,newLoan);
+  const cashOut = newLoan - payoff - refiClose;
+  const cashLeft = cashIn - cashOut;
+  const rr = fin(s.refiRate)/1200, rn = Math.round(fin(s.refiTerm)*12);
+  const ds = pmt(rr,rn,newLoan);
+  const noi = R.ops.noi, cf = noi - ds;
+  const dscr = dscrOf(noi,ds), coc = cocOf(cf,cashLeft);
+  const allIn = P + closeP + R.rehab + holdingCost;
+  Object.assign(R,{closeP,cash,loan,down,pi,m,hTax,hIns,hUtil,hLoan,hInt,holding,holdingCost,cashIn,refiMonth,payoff,newLoan,refiClose,cashOut,cashLeft,ds,noi,cf,dscr,coc,allIn,
+    allInPct: ARV>0 ? allIn/ARV*100 : NaN, equity: ARV-allIn, equityAfter: ARV-newLoan,
+    returnedPct: cashIn>0 ? cashOut/cashIn*100 : NaN, infinite: cashIn>0 && cashLeft<=0,
+    breakEvenRent: R.ops.k>0 ? (R.ops.fixed+ds)/R.ops.k : NaN});
+  const t70 = fin(s.rule70)/100*ARV;
+  R.tests = [
+    {id:'r70', name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70,
+      detail:`Purchase + rehab ${$(P+R.rehab)} vs. limit ${$(t70)} (${fin(s.rule70)}% of ARV)`,
+      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)],['arv','min','ARV needed to pass']]},
+    {id:'cash', name:'Cash left in deal', pass: cashLeft <= fin(s.maxCashLeft),
+      detail:`${$(cashLeft)} left in vs. target ≤ ${$(fin(s.maxCashLeft))}`,
+      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)],['arv','min','ARV needed to pass']]},
+    {id:'cf', name:'Monthly cash flow', pass: cf >= fin(s.minCF),
+      detail:`${$(cf)}/mo vs. target ≥ ${$(fin(s.minCF))}/mo`,
+      fixes:[['rent','min','Rent needed to pass'],['ltv','max','Max refi LTV to pass']]},
+    {id:'dscr', name:'DSCR', pass: dscr >= fin(s.minDSCR),
+      detail:`${x2(dscr)} vs. target ≥ ${x2(fin(s.minDSCR))}`,
+      fixes:[['rent','min','Rent needed to pass'],['ltv','max','Max refi LTV to pass']]},
+    {id:'coc', name:'Cash-on-cash return', pass: cocPass(cf,cashLeft,fin(s.minCoC)),
+      detail:`${pct(coc)} vs. target ≥ ${pct(fin(s.minCoC))}`,
+      fixes:[['rent','min','Rent needed to pass'],['price','max','Max purchase price to pass']]}
+  ];
+  return R;
+}
+
+function calcHH(s,R,insHO){
+  const {P,ARV,auto:A} = R;
+  const dp = clamp(fin(s.hhDown),0,100);
+  const loan = P*(1-dp/100), down = P-loan;
+  const closeP = cc(s.hhCloseVal,s.hhCloseUnit,P);
+  const r = fin(s.hhRate)/1200, n = Math.round(fin(s.hhTerm)*12);
+  const pi = pmt(r,n,loan);
+  const pmiMo = dp<20 ? loan*Math.max(0,fin(s.pmi))/100/12 : 0;
+  A.hhTax = Math.max(0, ARV*CLASS_III*R.mills/1000 - Math.max(0,fin(s.homestead)))/12; const hTax = pick(s,'hhTax',A.hhTax);
+  A.hhIns = ARV*insHO/1000/12; const hIns = pick(s,'hhIns',A.hhIns);
+  A.roomRent = R.beds>0 ? r25(R.rent/R.beds*ROOM_PREMIUM) : 0; const roomRent = Math.max(0,pick(s,'roomRent',A.roomRent));
+  const rooms = Math.max(0,Math.round(fin(s.roomsRented))), myRooms = Math.max(0,Math.round(fin(s.myRooms)));
+  const roomIncome = rooms*roomRent*(1-clamp(fin(s.roomVac),0,100)/100);
+  const util = fin(s.util);
+  const utilShare = s.utilSplit==='equal' ? util*rooms/(rooms+1) : 0;
+  const maint = R.rent*fin(s.maint)/100, capex = R.rent*fin(s.capex)/100, hOther = fin(s.hhOther);
+  const ownerCost = pi + pmiMo + hTax + hIns + util + maint + capex + hOther;
+  const housing = ownerCost - roomIncome - utilShare;
+  const cashIn = down + closeP + R.rehab;
+  const ds = pi + pmiMo, noi = R.ops.noi, cf = noi - ds;
+  const dscr = dscrOf(noi,ds), coc = cocOf(cf,cashIn);
+  const allIn = P + closeP + R.rehab;
+  Object.assign(R,{closeP,loan,down,pi,pmiMo,hTax,hIns,roomRent,rooms,myRooms,roomIncome,util,utilShare,maint,capex,hOther,ownerCost,housing,cashIn,cashLeft:cashIn,ds,noi,cf,dscr,coc,allIn,
+    allInPct: ARV>0 ? allIn/ARV*100 : NaN, equity: ARV-allIn, equityAfter: ARV-loan, roomsOk: rooms+myRooms <= R.beds,
+    breakEvenRent: R.ops.k>0 ? (R.ops.fixed+ds)/R.ops.k : NaN});
+  const t70 = fin(s.rule70)/100*ARV;
+  R.tests = [
+    {id:'hc', name:'My housing cost', pass: housing <= fin(s.maxHousing),
+      detail:`${$(housing)}/mo vs. target ≤ ${$(fin(s.maxHousing))}/mo`,
+      fixes:[['roomRent','min','Rent per room needed to pass'],['price','max','Max purchase price to pass']]},
+    {id:'r70', name:`${fin(s.rule70)}% rule`, pass: P+R.rehab <= t70,
+      detail:`Purchase + repairs ${$(P+R.rehab)} vs. limit ${$(t70)} (${fin(s.rule70)}% of ARV)`,
+      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)],['arv','min','ARV needed to pass']]},
+    {id:'cash', name:'Cash in the deal', pass: cashIn <= fin(s.maxCashLeft),
+      detail:`${$(cashIn)} (no refinance) vs. target ≤ ${$(fin(s.maxCashLeft))}`,
+      fixes:[['price','max','Max purchase price to pass'],['rehab','max',rehabLabel(s)]]},
+    {id:'cf', name:'Cash flow after move-out', pass: cf >= fin(s.minCF),
+      detail:`${$(cf)}/mo vs. target ≥ ${$(fin(s.minCF))}/mo`,
+      fixes:[['rent','min','Whole-house rent needed to pass']]},
+    {id:'dscr', name:'DSCR after move-out', pass: dscr >= fin(s.minDSCR),
+      detail:`${x2(dscr)} vs. target ≥ ${x2(fin(s.minDSCR))}`,
+      fixes:[['rent','min','Whole-house rent needed to pass']]},
+    {id:'coc', name:'Cash-on-cash after move-out', pass: cocPass(cf,cashIn,fin(s.minCoC)),
+      detail:`${pct(coc)} vs. target ≥ ${pct(fin(s.minCoC))}`,
+      fixes:[['rent','min','Whole-house rent needed to pass'],['price','max','Max purchase price to pass']]}
+  ];
+  return R;
+}
+function rehabLabel(s){ return fin(s.contPct)>0 ? `Max rehab budget to pass (before ${fin(s.contPct)}% contingency)` : 'Max rehab budget to pass'; }
+
+/* ---------- exact solver: bisection on the full model, then plug-back check ---------- */
+const VARS = {
+  price:   {get:s=>fin(s.price), set:(s,x)=>{s.price=x;}, step:1, money:true},
+  rehab:   {get:s=>calc(s).rehabBase, set:(s,x)=>{s.rehabBaseOv=x;}, step:1, money:true},
+  arv:     {get:s=>fin(s.arv), set:(s,x)=>{s.arv=x;}, step:1, money:true},
+  rent:    {get:s=>calc(s).rent, set:(s,x)=>{s.ov=Object.assign({},s.ov,{rent:x});}, step:1, money:true},
+  roomRent:{get:s=>calc(s).roomRent, set:(s,x)=>{s.ov=Object.assign({},s.ov,{roomRent:x});}, step:1, money:true},
+  ltv:     {get:s=>fin(s.ltv), set:(s,x)=>{s.ltv=x;}, step:0.1, money:false}
+};
+function withVar(s,key,x){ const t = JSON.parse(JSON.stringify(s)); VARS[key].set(t,x); return t; }
+function passesAt(s,key,x,id){ return calc(withVar(s,key,x)).tests.find(q=>q.id===id).pass; }
+function snap(x,step){ return Number((Math.round(x/step)*step).toFixed(6)); }
+function solve(s,key,dir,id){
+  const V = VARS[key], step = V.step, cur = V.get(s);
+  if(dir==='max'){
+    let lo = 0, hi = cur;
+    if(!passesAt(s,key,lo,id)) return null;
+    for(let i=0;i<100 && hi-lo>step/1000;i++){ const mid=(lo+hi)/2; if(passesAt(s,key,mid,id)) lo=mid; else hi=mid; }
+    let x = snap(Math.floor(lo/step+1e-9)*step, step);
+    for(let g=0; g<5 && x>0 && !passesAt(s,key,x,id); g++) x = snap(x-step,step);
+    if(!passesAt(s,key,x,id)) return null;
+    for(let g=0; g<5 && passesAt(s,key,snap(x+step,step),id); g++) x = snap(x+step,step);  // land exactly on the boundary
+    return x;
+  } else {
+    let lo = cur, hi = Math.max(cur*1.5, cur+1000), g = 0;
+    while(!passesAt(s,key,hi,id)){ lo = hi; hi *= 2; if(++g>30) return null; }
+    for(let i=0;i<100 && hi-lo>step/1000;i++){ const mid=(lo+hi)/2; if(passesAt(s,key,mid,id)) hi=mid; else lo=mid; }
+    let x = snap(Math.ceil(hi/step-1e-9)*step, step);
+    for(let k=0; k<5 && !passesAt(s,key,x,id); k++) x = snap(x+step,step);
+    if(!passesAt(s,key,x,id)) return null;
+    for(let k=0; k<5 && x-step>=0 && passesAt(s,key,snap(x-step,step),id); k++) x = snap(x-step,step);
+    return x;
+  }
+}
+function solveFixes(s,R){
+  for(const t of R.tests){
+    t.solved = [];
+    if(t.pass || R.incomplete) continue;
+    for(const [key,dir,label] of t.fixes){
+      const x = solve(s,key,dir,t.id);
+      t.solved.push({key,dir,label,x,cur:VARS[key].get(s),money:VARS[key].money});
+    }
+  }
+}
+function verdict(R){
+  if(R.incomplete) return {level:'none', word:'Needs input', why:'Enter a purchase price and an after-repair value (ARV) to run the tests.'};
+  const f = R.tests.filter(t=>!t.pass), n = R.tests.length;
+  const isHH = R.mode==='hh';
+  if(!f.length){
+    return {level:'pass', word:'Pass', why: isHH
+      ? `Clears all ${n} tests: you live for ${$(R.housing)}/mo and it cash flows ${$(R.cf)}/mo as a full rental.`
+      : `Clears all ${n} tests: ${$(R.cf)}/mo cash flow with ${R.cashLeft<=0 ? 'all of your cash back at the refi' : $(R.cashLeft)+' left in the deal'}.`};
+  }
+  const names = f.map(t=>t.name.toLowerCase()).join(', ');
+  const firstFix = (()=>{ for(const t of f){ const q=(t.solved||[]).find(z=>z.x!=null); if(q) return `${q.label.replace(' to pass','').replace(/ \(before.*\)/,'')} to pass ${t.name.toLowerCase()}: ${q.money?$(q.x):q.x.toFixed(1)+'%'}`; } return ''; })();
+  if(R.cf < 0){
+    const be = isFinite(R.breakEvenRent) ? ` Rent must reach ${$(Math.ceil(R.breakEvenRent))}/mo just to break even.` : '';
+    return {level:'fail', word:'Fail', why:`Loses ${$(-R.cf)}/mo ${isHH?'once you move out and rent the whole house':'after the refi loan payment'}.${be}`};
+  }
+  if(R.dscr < 1 || f.length >= 3) return {level:'fail', word:'Fail', why:`Fails ${f.length} of ${n} tests: ${names}.${firstFix?' First fix: '+firstFix+'.':''}`};
+  return {level:'warn', word:'Marginal', why:`Close, but misses ${names}.${firstFix?' '+firstFix+'.':''}`};
+}
+
+/* ---------- 5-year projection ---------- */
+function project(s,R){
+  const ap=fin(s.appr)/100, rg=fin(s.rentG)/100, eg=fin(s.expG)/100, o=R.ops;
+  const isB = R.mode!=='hh', scen = isB ? 'rental' : s.hhScen;
+  const L0 = isB ? R.newLoan : R.loan;
+  const r = (isB?fin(s.refiRate):fin(s.hhRate))/1200, n = Math.round((isB?fin(s.refiTerm):fin(s.hhTerm))*12);
+  const pi = pmt(r,n,L0);
+  const rows = [{y:0, value:R.ARV, loan:L0, equity:R.ARV-L0, cum:0}];
+  let cum = 0;
+  for(let y=1;y<=5;y++){
+    const gR=Math.pow(1+rg,y-1), gE=Math.pow(1+eg,y-1);
+    const startBal = bal(L0,r,n,12*(y-1));
+    const pmiY = (!isB && R.pmiMo>0 && startBal > 0.78*R.P) ? R.pmiMo*12 : 0;
+    const debt = pi*12 + pmiY;
+    let income, opex;
+    if(scen==='rental'){
+      income = o.rent*12*gR;
+      opex = (o.vac+o.maint+o.capex+o.mgmt+o.leasing)*12*gR + (o.tax+o.ins+o.other)*12*gE;
+    } else {
+      income = (R.roomIncome+R.utilShare)*12*gR;
+      opex = (R.hTax+R.hIns+R.util+R.maint+R.capex+R.hOther)*12*gE;
+    }
+    const cf = income - opex - debt; cum += cf;
+    const loan = bal(L0,r,n,12*y), value = R.ARV*Math.pow(1+ap,y);
+    rows.push({y,income,opex,debt,cf,loan,value,equity:value-loan,cum,pmiY});
+  }
+  return {rows, scen};
+}
+
+/* ---------- formatting ---------- */
+function $(x,d=0){ if(typeof x!=='number'||isNaN(x)) return '—'; if(!isFinite(x)) return x>0?'∞':'−∞';
+  const v=Math.abs(x).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+  return (x<-0.5*Math.pow(10,-d)?'−$':'$')+v; }
+function pct(x,d=1){ if(typeof x!=='number'||isNaN(x)) return '—'; if(!isFinite(x)) return x>0?'∞':'−∞'; return x.toFixed(d)+'%'; }
+function x2(x){ if(typeof x!=='number'||isNaN(x)) return '—'; if(!isFinite(x)) return x>0?'∞':'—'; return x.toFixed(2); }
+</script>
+
+<script>
+/* ================= UI ================= */
+const FIELDS = {}; // id -> spec
+function fld(id,label,o={}){
+  FIELDS[id] = Object.assign({id,label},o);
+  const pre = o.pre ? `<span class="pre">${o.pre}</span>` : '';
+  const suf = o.unitSel ? `<select id="${o.unitSel}" aria-label="${label} unit"><option value="%">% of ${o.unitBase||'price'}</option><option value="$">$</option></select>`
+            : (o.suf ? `<span class="suf">${o.suf}</span>` : '');
+  const tag = o.auto ? `<span class="tag" data-autotag="${id}">auto</span>` : '';
+  return `<div class="fld"><label for="${id}">${label} ${tag}</label><div class="inp">${pre}<input id="${id}" inputmode="decimal" autocomplete="off">${suf}</div>${o.hint?`<div class="hint" id="${id}_hint">${o.hint}</div>`:''}</div>`;
+}
+function seg(name,opts,cls=''){ return `<div class="seg ${cls}" role="radiogroup">${opts.map(([v,l],i)=>`<input type="radio" name="${name}" id="${name}_${v}" value="${v}"><label for="${name}_${v}">${l}</label>`).join('')}</div>`; }
+function card(id,mode,title,desc,body){ return `<section class="card" id="${id}" data-mode="${mode}"><header><h2 id="${id}_t">${title}</h2>${desc?`<p id="${id}_d">${desc}</p>`:''}</header>${body}</section>`; }
+
+document.getElementById('inputs').innerHTML = [
+  card('secProp','both','Property','Area defaults fill the tax rate, insurance and rent. Anything marked auto can be typed over; tap “edited · reset” to go back.',
+    `<div class="fields">
+      <div class="fld"><label for="beds">Bedrooms</label><div class="inp"><select id="beds" style="flex:1;border:0;background:transparent"><option value="2">2 bedrooms</option><option value="3">3 bedrooms</option><option value="4">4 bedrooms</option></select></div></div>
+      ${fld('price','Purchase price',{pre:'$'})}
+      ${fld('arv','After-repair value (ARV)',{pre:'$',hint:'Appraised value once the work is done'})}
+      ${fld('mills','Total property tax millage',{suf:'mills',auto:true,hint:'Area default'})}
+    </div>`),
+  card('secRehab','both','Rehab budget','',
+    `<div class="row"><span class="lbl">Estimate as</span>${seg('rehabMode',[['lump','One lump sum'],['items','Line items']],'sm')}</div>
+     <div class="fields" id="rehabLumpBox">${fld('rehabLump','Rehab budget',{pre:'$'})}${fld('contPct','Contingency',{suf:'%',hint:'10–15% is typical'})}</div>
+     <div id="rehabItemsBox" hidden>
+       <div class="fields">${ITEMS.map(([k,l])=>fld('ri_'+k,l,{pre:'$'})).join('')}${fld('contPct2','Contingency',{suf:'%',hint:'10–15% is typical'})}</div>
+     </div>
+     <div class="readout" style="margin-top:12px"><span>Rehab total with contingency</span><b id="rehabTotal">—</b></div>`),
+  card('secLoan','brrrr','Purchase financing','',
+    `<div class="row"><span class="lbl">Pay with</span>${seg('finMode',[['loan','Conventional loan'],['cash','Cash']],'sm')}</div>
+     <div class="fields">
+      <span id="loanFields" style="display:contents">${fld('downPct','Down payment',{suf:'%',hint:'Investor loans: 15–25% down'})}${fld('rate','Interest rate',{suf:'%'})}${fld('term','Term',{suf:'years'})}</span>
+      ${fld('closeVal','Closing costs',{unitSel:'closeUnit'})}
+     </div>
+     <div class="callout">Heavily distressed houses (no working kitchen, bath, roof or HVAC) often fail a conventional appraisal and can't get a conventional loan. Plan on cash, hard money or a renovation loan for those.</div>`),
+  card('secHold','brrrr','Holding costs during rehab','Vacant property is taxed as Class II (20% of value), the same as a rental.',
+    `<div class="fields">
+      ${fld('holdMonths','Months held',{suf:'months'})}
+      ${fld('holdTax','Property tax',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('holdIns','Insurance (vacant / builder’s risk)',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('holdUtil','Utilities',{pre:'$',suf:'/mo'})}
+     </div>
+     <div class="readout" style="margin-top:12px"><span>Loan payments while holding</span><b id="holdLoanOut">—</b></div>`),
+  card('secRefi','brrrr','Refinance','',
+    `<div class="fields">
+      ${fld('ltv','Loan-to-value (LTV)',{suf:'%',hint:'Cash-out on investment property: usually 70–75%'})}
+      ${fld('refiRate','Interest rate',{suf:'%'})}
+      ${fld('refiTerm','Term',{suf:'years'})}
+      ${fld('refiCloseVal','Closing costs',{unitSel:'refiCloseUnit',unitBase:'new loan'})}
+      ${fld('seasoning','Seasoning before refi',{suf:'months'})}
+     </div>
+     <div class="callout" id="seasonNote">If seasoning runs longer than the rehab, the months in between are assumed rented and self-funding.</div>`),
+  card('secHHLoan','hh','Owner-occupant financing','You live there, so the house is taxed as Class III (10% of value) and qualifies for a homestead exemption.',
+    `<div class="fields">
+      ${fld('hhDown','Down payment',{suf:'%',hint:'3–5% for first-time / owner-occupant conventional'})}
+      ${fld('hhRate','Interest rate',{suf:'%'})}
+      ${fld('hhTerm','Term',{suf:'years'})}
+      ${fld('pmi','PMI',{suf:'%/yr',hint:'Drops off at 20% down or more'})}
+      ${fld('hhCloseVal','Closing costs',{unitSel:'hhCloseUnit'})}
+      ${fld('homestead','Homestead exemption',{pre:'$',suf:'/yr',hint:'State + county exemptions ≈ $50/yr'})}
+      ${fld('hhTax','Property tax (owner-occupied)',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('hhIns','Homeowner insurance',{pre:'$',suf:'/mo',auto:true})}
+     </div>
+     <div class="callout">Repairs in house-hack mode are paid in cash at purchase. If you use an FHA 203(k) or HomeStyle loan instead, lower the repair budget and raise the purchase price by the amount you finance.</div>`),
+  card('secRoom','hh','Roommates','',
+    `<div class="fields">
+      ${fld('roomsRented','Bedrooms rented to roommates',{suf:'rooms'})}
+      ${fld('roomRent','Rent per room',{pre:'$',suf:'/mo',auto:true,hint:'Auto: whole-house rent ÷ bedrooms + 15%'})}
+      ${fld('myRooms','Bedrooms I keep',{suf:'rooms'})}
+      ${fld('roomVac','Room vacancy',{suf:'%'})}
+      ${fld('util','Utilities + internet (whole house)',{pre:'$',suf:'/mo'})}
+      <div class="fld"><label for="utilSplit">Utilities</label><div class="inp"><select id="utilSplit" style="flex:1;border:0;background:transparent"><option value="equal">Split equally per person</option><option value="incl">I pay all (in room rent)</option></select></div></div>
+      ${fld('hhOther','Other monthly costs',{pre:'$',suf:'/mo',hint:'HOA, lawn, pest, supplies'})}
+     </div>
+     <div class="callout warn" id="roomWarn" hidden></div>`),
+  card('secRent','both','Rental','',
+    `<div class="fields">
+      ${fld('rent','Monthly rent (whole house)',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('vac','Vacancy',{suf:'% of rent'})}
+      ${fld('maint','Maintenance',{suf:'% of rent'})}
+      ${fld('capex','CapEx reserve',{suf:'% of rent'})}
+      ${fld('rentTax','Property tax (rental, Class II)',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('rentIns','Landlord insurance',{pre:'$',suf:'/mo',auto:true})}
+      ${fld('otherMo','Other monthly costs',{pre:'$',suf:'/mo',hint:'HOA, lawn, owner-paid utilities'})}
+     </div>
+     <div class="row" style="margin-top:14px;margin-bottom:10px"><span class="lbl">Management</span>${seg('mgmt',[['self','Self-managed (0%)'],['pm','Property manager']],'sm')}</div>
+     <div class="fields" id="pmFields">
+      ${fld('pmPct','Management fee',{suf:'% of collected rent',hint:'Birmingham: 8–12%'})}
+      ${fld('leaseFee','Leasing fee',{suf:'% of 1 month',hint:'Set 0 for none; 50–100% is common'})}
+      ${fld('leasesPerYear','New leases per year',{suf:'/yr',hint:'0.5 = a new tenant every 2 years'})}
+     </div>`),
+  card('secTargets','both','Your targets','Each test is pass/fail against these numbers.',
+    `<div class="fields">
+      ${fld('maxHousing','Max monthly housing cost for me',{pre:'$',suf:'/mo'})}
+      ${fld('rule70','Purchase + rehab rule',{suf:'% of ARV'})}
+      ${fld('maxCashLeft','Max cash left in deal',{pre:'$'})}
+      ${fld('minCF','Min monthly cash flow',{pre:'$',suf:'/mo'})}
+      ${fld('minDSCR','Min DSCR',{suf:'×'})}
+      ${fld('minCoC','Min cash-on-cash',{suf:'%'})}
+     </div>`)
+].join('');
+document.getElementById('maxHousing').closest('.fld').dataset.mode='hh';
+
+document.getElementById('area').innerHTML = AREAS.map(a=>`<option value="${a.id}">${a.name}</option>`).join('');
+
+/* ---------- defaults & sample ---------- */
+const DEFAULTS = {
+  mode:'brrrr', area:'bham', beds:'3', price:'', arv:'', rehabMode:'lump', rehabLump:'', contPct:'10',
+  finMode:'loan', downPct:'20', rate:'7.70', term:'30', closeVal:'3', closeUnit:'%',
+  holdMonths:'4', holdUtil:'150',
+  ltv:'70', refiRate:'7.95', refiTerm:'30', refiCloseVal:'2.5', refiCloseUnit:'%', seasoning:'6',
+  hhDown:'5', hhRate:'6.95', hhTerm:'30', pmi:'0.70', hhCloseVal:'3', hhCloseUnit:'%', homestead:'50',
+  roomsRented:'2', myRooms:'1', roomVac:'5', util:'350', utilSplit:'equal', hhOther:'0',
+  vac:'8', maint:'8', capex:'8', otherMo:'0', mgmt:'self', pmPct:'10', leaseFee:'50', leasesPerYear:'0.5',
+  maxHousing:'500', rule70:'70', maxCashLeft:'10000', minCF:'200', minDSCR:'1.20', minCoC:'8',
+  appr:'3', rentG:'2.5', expG:'3.5', hhScen:'live'
+};
+ITEMS.forEach(([k])=>DEFAULTS['ri_'+k]='');
+const SAMPLE = {price:'110000', arv:'190000', rehabLump:'45000', ov:{rent:1650}};
+const AUTO_KEYS = ['mills','rent','holdTax','holdIns','rentTax','rentIns','hhTax','hhIns','roomRent'];
+let OV = {};
+let STATE = {};
+const RADIOS = ['mode','rehabMode','finMode','mgmt'];
+const SELECTS = ['area','beds','closeUnit','refiCloseUnit','hhCloseUnit','utilSplit','hhScen'];
+
+function applyValues(vals){
+  for(const [k,v] of Object.entries(vals)){
+    if(k==='ov') continue;
+    if(RADIOS.includes(k)){ const el=document.getElementById(k+'_'+v); if(el) el.checked=true; continue; }
+    STATE[k]=v;
+    const el=document.getElementById(k); if(el) el.value=v;
+  }
+  const c2=document.getElementById('contPct2'); if(c2) c2.value=document.getElementById('contPct').value;
+}
+function loadSample(){ OV={...SAMPLE.ov}; applyValues({...DEFAULTS, ...SAMPLE, mode:getRadio('mode')||'brrrr'}); }
+function newDeal(){ OV={}; const keep={}; applyValues({...DEFAULTS, mode:getRadio('mode')||'brrrr', area:document.getElementById('area').value}); }
+function getRadio(n){ const el=document.querySelector(`input[name="${n}"]:checked`); return el?el.value:null; }
+
+function parseNum(str){
+  if(str==null) return {v:0,bad:false};
+  const t=String(str).replace(/[$,%\s×x]/gi,'').replace(/[−–]/g,'-');
+  if(t==='') return {v:0,bad:false,blank:true};
+  const v=Number(t); return isFinite(v)?{v,bad:false}:{v:0,bad:true};
+}
+function readState(){
+  const s={ov:{...OV}};
+  RADIOS.forEach(n=>s[n]=getRadio(n));
+  SELECTS.forEach(id=>{ const el=document.getElementById(id); if(el) s[id]=el.value; });
+  s.beds=Number(s.beds)||3;
+  for(const id of Object.keys(FIELDS)){
+    if(AUTO_KEYS.includes(id)) continue;
+    const el=document.getElementById(id); const p=parseNum(el.value);
+    el.parentElement.classList.toggle('bad',p.bad);
+    s[id]=p.v;
+  }
+  return s;
+}
+
+/* ---------- render ---------- */
+const fmtIn = (x,d=0)=> (typeof x==='number'&&isFinite(x)) ? x.toLocaleString('en-US',{maximumFractionDigits:d}) : '';
+function syncAutos(R){
+  for(const k of AUTO_KEYS){
+    const el=document.getElementById(k); if(!el) continue;
+    const tag=document.querySelector(`[data-autotag="${k}"]`);
+    const over = typeof OV[k]==='number';
+    if(document.activeElement!==el){
+      if(!over && R.auto[k]!==undefined) el.value = fmtIn(R.auto[k], k==='mills'?1:0);
+      else if(over && parseNum(el.value).v!==OV[k]) el.value = fmtIn(OV[k], 2);
+    }
+    if(tag){
+      if(over){ if(tag.tagName!=='BUTTON'){ const b=document.createElement('button'); b.type='button'; b.className='tag'; b.dataset.autotag=k; b.textContent='edited · reset'; b.title='Go back to the area default'; tag.replaceWith(b);} }
+      else if(tag.tagName==='BUTTON'){ const sp=document.createElement('span'); sp.className='tag'; sp.dataset.autotag=k; sp.textContent='auto'; tag.replaceWith(sp); }
+    }
+  }
+}
+function statHTML(k,v,sub='',cls=''){ return `<div class="stat ${cls}"><div class="k">${k}</div><div class="v ${cls.includes('sign')?'':''}">${v}</div>${sub?`<div class="s">${sub}</div>`:''}</div>`; }
+function signed(x){ return `<span class="${x<0?'neg':''}">${$(x)}</span>`; }
+function vCls(x){ return x<0?'neg':''; }
+function testsHTML(R){
+  return `<ul class="tests">${R.tests.map(t=>`<li class="test ${t.pass?'pass':'fail'}">
+    <div class="th"><span class="nm">${t.name}</span><span class="st">${t.pass?'✓ PASS':'✕ FAIL'}</span></div>
+    <div class="dt">${t.detail}</div>
+    ${(!t.pass && t.solved && t.solved.length)?`<div class="fix">${t.solved.map(q=>`<div>${q.label}: <b>${q.x==null?'not reachable with this change alone':(q.money?$(q.x):q.x.toFixed(1)+'%')}</b>${q.x==null?'':` <span class="small">(now ${q.money?$(q.cur):q.cur.toFixed(1)+'%'})</span>`}</div>`).join('')}</div>`:''}
+  </li>`).join('')}</ul>`;
+}
+function breakdownHTML(R){
+  const o=R.ops, rows=[['Rent',o.rent],['Vacancy',-o.vac],['Maintenance',-o.maint],['CapEx reserve',-o.capex]];
+  if(o.mgmt) rows.push(['Management',-o.mgmt]); if(o.leasing) rows.push(['Leasing fee (averaged)',-o.leasing]);
+  rows.push(['Property tax (Class II)',-o.tax],['Landlord insurance',-o.ins]); if(o.other) rows.push(['Other',-o.other]);
+  rows.push(['__Cash flow before debt (NOI)',o.noi],[R.mode==='hh'?'Mortgage P&I + PMI':'Refi loan P&I',-R.ds],['__Cash flow after debt',R.cf]);
+  return `<table class="bd">${rows.map(([k,v])=>`<tr class="${k.startsWith('__')?'tot':''}"><td>${k.replace('__','')}</td><td class="${v<0?'neg':''}">${$(v)}</td></tr>`).join('')}</table>`;
+}
+function hhBreakdownHTML(R){
+  const rows=[['Mortgage P&I',R.pi],['PMI',R.pmiMo],['Property tax (Class III)',R.hTax],['Homeowner insurance',R.hIns],['Utilities (whole house)',R.util],['Maintenance',R.maint],['CapEx reserve',R.capex]];
+  if(R.hOther) rows.push(['Other',R.hOther]);
+  rows.push(['__Total owner cost',R.ownerCost],['Roommate rent (after vacancy)',-R.roomIncome]);
+  if(R.utilShare) rows.push(['Roommates’ utility share',-R.utilShare]);
+  rows.push(['__My housing cost',R.housing]);
+  return `<table class="bd">${rows.map(([k,v])=>`<tr class="${k.startsWith('__')?'tot':''}"><td>${k.replace('__','')}</td><td class="${v<0?'neg':''}">${$(v)}</td></tr>`).join('')}</table>`;
+}
+
+function renderResults(s,R,V){
+  const pill = `<span class="pill ${V.level}">${{pass:'✓',warn:'!',fail:'✕',none:'…'}[V.level]} ${V.word.toUpperCase()}</span>`;
+  let h = `<div class="panel verdict"><div class="line">${pill}<span class="small">${R.mode==='hh'?'House hack':'BRRRR'} · ${R.area.name}</span></div><div class="why">${V.why}</div>
+    <div class="line"><button class="btn primary" id="btnCopy" type="button">Copy summary</button></div><div id="copyBox"></div></div>`;
+  if(R.mode!=='hh'){
+    const inf = R.incomplete ? '' : (R.infinite
+      ? `<div class="chip pass">∞ Infinite return: the refi hands back ${pct(R.returnedPct,0)} of your cash</div>`
+      : `<div class="chip ${R.returnedPct>=75?'warn':'fail'}">Refi returns ${pct(R.returnedPct,0)} of your cash</div>`);
+    h += `<div class="panel"><div class="sectionhead"><h3>Cash</h3></div>
+      <div class="stats">
+        ${statHTML('Total cash invested',$(R.cashIn),`Down ${$(R.down)} · closing ${$(R.closeP)} · rehab ${$(R.rehab)} · holding ${$(R.holding)}`,'wide')}
+        ${statHTML('Cash out at refi',signed(R.cashOut),`New loan ${$(R.newLoan)} − payoff ${$(R.payoff)} − costs ${$(R.refiClose)}`)}
+        ${statHTML('Cash left in deal',signed(R.cashLeft),R.cashLeft<=0?'You recovered everything':'Still tied up')}
+      </div><div style="margin-top:10px">${inf}</div></div>
+      <div class="panel"><div class="sectionhead"><h3>Rental, day one after refi</h3></div>
+      <div class="stats">
+        ${statHTML('Cash flow before debt',`${signed(R.noi)}<span class="small">/mo</span>`,'Net operating income')}
+        ${statHTML('Cash flow after debt',`${signed(R.cf)}<span class="small">/mo</span>`,`${$(R.cf*12)}/yr`)}
+        ${statHTML('Cash-on-cash',pct(R.coc),R.cashLeft<=0?'No cash left in, so any positive cash flow is infinite':'Annual cash flow ÷ cash left in')}
+        ${statHTML('DSCR',x2(R.dscr),'NOI ÷ loan payment')}
+        ${statHTML('Equity created',signed(R.equity),`ARV − all-in cost · ${$(R.equityAfter)} after refi`)}
+        ${statHTML('All-in cost',pct(R.allInPct),`${$(R.allIn)} of ${$(R.ARV)} ARV`)}
+      </div></div>`;
+  } else {
+    const taxJump = R.hTax>0 ? ` Property tax goes from ${$(R.hTax)}/mo to ${$(R.ops.tax)}/mo when you move out (Class III → Class II).` : '';
+    h += `<div class="panel"><div class="sectionhead"><h3>Living there</h3></div>
+      <div class="stats">
+        ${statHTML('My effective housing cost',`${signed(R.housing)}<span class="small">/mo</span>`,R.housing<0?'Roommates cover everything and pay you':`vs. ${$(R.roomRent)}/mo to rent one room here at market`,'wide hero')}
+        ${statHTML('Cash to close',$(R.cashIn),`Down ${$(R.down)} · closing ${$(R.closeP)} · repairs ${$(R.rehab)}`,'wide')}
+        ${statHTML('Total owner cost',`${$(R.ownerCost)}<span class="small">/mo</span>`,'PITI, PMI, utilities, reserves')}
+        ${statHTML('Roommate income',`${$(R.roomIncome+R.utilShare)}<span class="small">/mo</span>`,`${R.rooms} room${R.rooms===1?'':'s'} × ${$(R.roomRent)}${R.utilShare?' + utility share':''}`)}
+      </div></div>
+      <div class="panel"><div class="sectionhead"><h3>When I move out</h3></div>
+      <div class="small" style="margin-bottom:8px">The whole house rents for ${$(R.rent)}/mo with landlord insurance.${taxJump}</div>
+      <div class="stats">
+        ${statHTML('Cash flow before debt',`${signed(R.noi)}<span class="small">/mo</span>`,'Net operating income')}
+        ${statHTML('Cash flow after debt',`${signed(R.cf)}<span class="small">/mo</span>`,`${$(R.cf*12)}/yr`)}
+        ${statHTML('Cash-on-cash',pct(R.coc),'Annual cash flow ÷ cash in')}
+        ${statHTML('DSCR',x2(R.dscr),'NOI ÷ (P&I + PMI)')}
+        ${statHTML('Equity created',signed(R.equity),`ARV − all-in cost · ${$(R.equityAfter)} over the loan`)}
+        ${statHTML('All-in cost',pct(R.allInPct),`${$(R.allIn)} of ${$(R.ARV)} ARV`)}
+      </div></div>`;
+  }
+  h += `<div class="panel"><div class="sectionhead"><h3>Tests</h3><span class="small">${R.tests.filter(t=>t.pass).length} of ${R.tests.length} pass</span></div>${R.incomplete?'<div class="small">Waiting for purchase price and ARV.</div>':testsHTML(R)}</div>`;
+  h += `<div class="panel"><details class="more"><summary>Monthly breakdown</summary><div style="margin-top:8px">${R.mode==='hh'?'<h3 style="margin:6px 0">Living there</h3>'+hhBreakdownHTML(R)+'<h3 style="margin:14px 0 6px">After move-out</h3>':''}${breakdownHTML(R)}</div></details></div>`;
+  document.getElementById('results').innerHTML = h;
+  document.getElementById('btnCopy').onclick = ()=>copySummary(s,R,V);
+  document.getElementById('mbar').innerHTML = `<span>${pill}</span><span class="m">${R.mode==='hh'?'Housing':'Cash flow'} <b>${R.mode==='hh'?$(R.housing):$(R.cf)}/mo</b> · ${R.tests.filter(t=>t.pass).length}/${R.tests.length} tests</span><a class="btn" href="#resultsCol">Results</a>`;
+}
+
+function summaryText(s,R,V){
+  const L=[]; const isHH=R.mode==='hh';
+  L.push(`${isHH?'HOUSE HACK':'BRRRR'} DEAL SUMMARY · ${R.area.name}, AL · ${R.beds} BR`);
+  L.push(`Verdict: ${V.word.toUpperCase()} · ${V.why}`);
+  L.push('');
+  L.push(`Purchase ${$(R.P)} · ARV ${$(R.ARV)} · Rehab ${$(R.rehab)} (incl. ${fin(s.contPct)}% contingency)`);
+  L.push(`Whole-house rent ${$(R.rent)}/mo · Tax ${R.mills.toFixed(1)} mills`);
+  if(!isHH){
+    L.push(`Financing: ${R.cash?'cash':`${fin(s.downPct)}% down at ${fin(s.rate)}% / ${fin(s.term)} yr`} · Refi ${fin(s.ltv)}% LTV at ${fin(s.refiRate)}% after ${R.refiMonth} mo`);
+    L.push('');
+    L.push(`Total cash invested: ${$(R.cashIn)}`);
+    L.push(`Cash out at refi: ${$(R.cashOut)}`);
+    L.push(`Cash left in deal: ${$(R.cashLeft)}${R.infinite?'  (INFINITE RETURN)':` (refi returns ${pct(R.returnedPct,0)} of cash)`}`);
+    L.push(`Cash flow before debt: ${$(R.noi)}/mo · after debt: ${$(R.cf)}/mo`);
+  } else {
+    L.push(`Financing: ${fin(s.hhDown)}% down at ${fin(s.hhRate)}% / ${fin(s.hhTerm)} yr + ${fin(s.pmi)}% PMI`);
+    L.push('');
+    L.push(`Cash to close: ${$(R.cashIn)}`);
+    L.push(`Owner cost ${$(R.ownerCost)}/mo − roommates ${$(R.roomIncome+R.utilShare)}/mo = MY HOUSING COST ${$(R.housing)}/mo`);
+    L.push(`After move-out: NOI ${$(R.noi)}/mo · cash flow ${$(R.cf)}/mo`);
+  }
+  L.push(`Cash-on-cash ${pct(R.coc)} · DSCR ${x2(R.dscr)} · Equity created ${$(R.equity)} · All-in ${pct(R.allInPct)} of ARV`);
+  L.push('');
+  L.push('TESTS');
+  R.tests.forEach(t=>{
+    L.push(`[${t.pass?'PASS':'FAIL'}] ${t.name}: ${t.detail}`);
+    (t.solved||[]).forEach(q=>L.push(`       ${q.label}: ${q.x==null?'not reachable alone':(q.money?$(q.x):q.x.toFixed(1)+'%')}`));
+  });
+  L.push('');
+  L.push('Analysis tool only, not financial or lending advice.');
+  return L.join('\n');
+}
+function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),1800); }
+function copySummary(s,R,V){
+  const txt = summaryText(s,R,V);
+  const fallback=()=>{ const box=document.getElementById('copyBox'); box.innerHTML='<div class="small" style="margin-top:8px">Copy was blocked here. Select the text below and copy it.</div><textarea id="copyFallback" readonly></textarea>'; const ta=document.getElementById('copyFallback'); ta.value=txt; ta.focus(); ta.select(); };
+  try{ navigator.clipboard.writeText(txt).then(()=>toast('Summary copied'),fallback); }catch(e){ fallback(); }
+}
+
+/* ---------- projection render ---------- */
+function renderProjection(s,R){
+  const body=document.getElementById('projBody');
+  const isHH=R.mode==='hh';
+  if(!body.dataset.built){
+    body.innerHTML = `<div class="fields" style="margin-bottom:12px">
+        ${fld('appr','Annual appreciation',{suf:'%'})}${fld('rentG','Rent growth',{suf:'%/yr'})}${fld('expG','Expense growth',{suf:'%/yr'})}
+        <div class="fld" id="scenBox"><label for="hhScen">House-hack scenario</label><div class="inp"><select id="hhScen" style="flex:1;border:0;background:transparent"><option value="live">Keep living there</option><option value="rental">Move out, full rental</option></select></div></div>
+      </div><div id="projOut"></div>`;
+    body.dataset.built='1';
+    ['appr','rentG','expG','hhScen'].forEach(id=>{ const el=document.getElementById(id); el.value=STATE[id]??DEFAULTS[id]; el.addEventListener('input',update); el.addEventListener('change',update); });
+    return renderProjection(readState2(), R);
+  }
+  document.getElementById('scenBox').hidden = !isHH;
+  if(R.incomplete){ document.getElementById('projOut').innerHTML='<div class="small">Enter a purchase price and ARV to see the projection.</div>'; return; }
+  const P = project(s,R), rows=P.rows;
+  const incomeLbl = P.scen==='live' ? 'Roommate income' : 'Rent';
+  const cfLbl = P.scen==='live' ? 'Net (− = my cost)' : 'Cash flow';
+  const tbl = `<div class="scroll"><table><thead><tr><th>Year</th><th>${incomeLbl}</th><th>Operating costs</th><th>Mortgage${isHH?' + PMI':''}</th><th>${cfLbl}</th><th>Loan balance</th><th>Property value</th><th>Equity</th><th>Cumulative cash flow</th></tr></thead><tbody>
+    ${rows.slice(1).map(r=>`<tr><td>${r.y}</td><td>${$(r.income)}</td><td>${$(r.opex)}</td><td>${$(r.debt)}</td><td class="${r.cf<0?'neg':''}">${$(r.cf)}</td><td>${$(r.loan)}</td><td>${$(r.value)}</td><td>${$(r.equity)}</td><td class="${r.cum<0?'neg':''}">${$(r.cum)}</td></tr>`).join('')}
+    </tbody></table></div>
+    <div class="small" style="margin-top:6px">${isHH?'PMI stops once the balance falls to 78% of the purchase price. ':''}Year 0 is ${isHH?'closing':'the refinance'}; values are annual. Operating costs include vacancy.</div>`;
+  const po=document.getElementById('projOut'); CHART_W = Math.max(300, Math.min(760, po.clientWidth||640));
+  po.innerHTML = tbl + chartHTML(rows);
+  wireChart(rows);
+}
+let CHART_W=640;
+function niceMax(v){ if(v<=0) return 1; const p=Math.pow(10,Math.floor(Math.log10(v))); const m=v/p; return (m<=1?1:m<=2?2:m<=2.5?2.5:m<=5?5:10)*p; }
+function kfmt(v){ if(!v) return '$0'; return Math.abs(v)>=1e6 ? '$'+(v/1e6).toFixed(1)+'M' : '$'+(v/1000).toLocaleString('en-US',{maximumFractionDigits:1})+'k'; }
+function chartHTML(rows){
+  const W=CHART_W,H=260,ml=52,mr=64,mt=14,mb=28, iw=W-ml-mr, ih=H-mt-mb;
+  const step=niceMax(Math.max(...rows.map(r=>r.value))*1.05/4), ymax=Math.ceil(Math.max(...rows.map(r=>r.value))*1.05/step)*step;
+  const X=y=>ml+iw*y/5, Y=v=>mt+ih*(1-Math.max(0,v)/ymax);
+  const ticks=[]; for(let t=0;t<=ymax+1e-6;t+=step) ticks.push(t);
+  const vPts=rows.map(r=>`${X(r.y)},${Y(r.value)}`), lPts=rows.map(r=>`${X(r.y)},${Y(r.loan)}`);
+  const band=`M${vPts.join('L')}L${lPts.slice().reverse().join('L')}Z`;
+  const last=rows[rows.length-1];
+  let ly1=Y(last.value), ly2=Y(last.loan); if(ly2-ly1<16){ ly2=ly1+16; }
+  return `<div class="legend"><span><i style="background:var(--c1)"></i>Property value</span><span><i style="background:var(--c2)"></i>Loan balance</span><span><i class="band"></i>Equity</span></div>
+  <div class="chartwrap" id="chartwrap"><svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Property value versus loan balance, years 0 to 5" style="display:block;max-width:100%">
+    ${ticks.map(t=>`<line x1="${ml}" x2="${W-mr}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--line)" stroke-width="1"/><text x="${ml-8}" y="${Y(t)+4}" text-anchor="end">${kfmt(t)}</text>`).join('')}
+    ${rows.map(r=>`<text x="${X(r.y)}" y="${H-8}" text-anchor="middle">Yr ${r.y}</text>`).join('')}
+    <path d="${band}" fill="var(--band)"/>
+    <polyline points="${vPts.join(' ')}" fill="none" stroke="var(--c1)" stroke-width="2" stroke-linejoin="round"/>
+    <polyline points="${lPts.join(' ')}" fill="none" stroke="var(--c2)" stroke-width="2" stroke-linejoin="round"/>
+    ${rows.map(r=>`<circle cx="${X(r.y)}" cy="${Y(r.value)}" r="4" fill="var(--c1)" stroke="var(--surface)" stroke-width="2"/><circle cx="${X(r.y)}" cy="${Y(r.loan)}" r="4" fill="var(--c2)" stroke="var(--surface)" stroke-width="2"/>`).join('')}
+    <text x="${X(5)+10}" y="${ly1+4}" style="fill:var(--ink);font-weight:600">Value</text>
+    <text x="${X(5)+10}" y="${ly2+4}" style="fill:var(--ink);font-weight:600">Loan</text>
+    <line id="xhair" x1="0" x2="0" y1="${mt}" y2="${mt+ih}" stroke="var(--line-strong)" stroke-width="1" visibility="hidden"/>
+    ${rows.map(r=>`<rect data-y="${r.y}" x="${X(r.y)-iw/10}" y="${mt}" width="${iw/5}" height="${ih}" fill="transparent"/>`).join('')}
+  </svg><div class="tip" id="tip" hidden></div></div>`;
+}
+function wireChart(rows){
+  const wrap=document.getElementById('chartwrap'), tip=document.getElementById('tip'), xh=document.getElementById('xhair');
+  wrap.querySelectorAll('rect[data-y]').forEach(rc=>{
+    const show=()=>{ const r=rows[+rc.dataset.y]; const x=+rc.getAttribute('x')+(+rc.getAttribute('width'))/2;
+      xh.setAttribute('x1',x); xh.setAttribute('x2',x); xh.setAttribute('visibility','visible');
+      tip.innerHTML=`<div class="h">Year ${r.y}</div><div><span>Value</span><b>${$(r.value)}</b></div><div><span>Loan</span><b>${$(r.loan)}</b></div><div><span>Equity</span><b>${$(r.equity)}</b></div>${r.y?`<div><span>Cumulative cash flow</span><b>${$(r.cum)}</b></div>`:''}`;
+      tip.hidden=false; const sw=wrap.clientWidth, px=x/CHART_W*sw; tip.style.left=Math.min(Math.max(0,px-90),sw-190)+'px'; tip.style.top='8px'; };
+    rc.addEventListener('mouseenter',show); rc.addEventListener('click',show);
+  });
+  wrap.addEventListener('mouseleave',()=>{ tip.hidden=true; xh.setAttribute('visibility','hidden'); });
+}
+
+/* ---------- assumptions ---------- */
+function renderAssumptions(){
+  const src = (t,u)=>`<a href="${u}" target="_blank" rel="noopener">${t}</a>`;
+  const rows = [
+    ['Owner-occupant 30-yr fixed','6.95%',src('Freddie Mac PMMS','https://www.freddiemac.com/pmms'),'Sep 17, 2026'],
+    ['Investor purchase rate','7.70% (PMMS + 0.75 pt)',src('The Mortgage Reports: investor premium 0.5–1.0 pt','https://themortgagereports.com/27698/investment-property-mortgage-rates-how-much-more-will-you-pay'),'Sep 2026'],
+    ['Investor cash-out refi rate','7.95% (PMMS + 1.0 pt)','Same source; cash-out on investment property carries extra pricing adjustments','Sep 2026'],
+    ['PMI','0.70% of loan per year',src('Zeitro: 2026 PMI averages 0.46–1.50%','https://www.zeitro.com/blog/pmi-cost'),'2026'],
+    ['Assessment ratio','Rental / vacant: Class II, 20% of value. Owner-occupied: Class III, 10%',src('Code of Alabama §40-8-1','https://law.justia.com/codes/alabama/title-40/chapter-8/section-40-8-1/'),'2025 code'],
+    ['Tax formula','Value × ratio × total mills ÷ 1,000. BRRRR hold uses purchase price; rental and owner tax use ARV',src('Alabama DOR: property tax assessment','https://www.revenue.alabama.gov/property-tax/property-tax-assessment/'),'2025'],
+    ['Millage by area','See table below',src('Alabama DOR 2025 millage rates','https://www.revenue.alabama.gov/wp-content/uploads/2025/09/2025-Millage-Rates.pdf')+', '+src('Shelby Co. millage','https://ptc.shelbyal.com/millage')+', '+src('CBS 42 city totals','https://www.cbs42.com/news/local/proposed-millage-rate-increase-could-help-fund-new-elementary-school-for-trussville/'),'Tax year 2025 (Oct 2025)'],
+    ['Homestead exemption','$50/yr credit (state $4,000 + county $2,000 of assessed value)','Alabama DOR homestead exemption; confirm with your county','2025'],
+    ['Homeowner insurance','$7.60–$9.20 per $1,000 of value by area (Birmingham city ≈ $9.00)',src('Insurify: Birmingham avg $2,601/yr on $300k','https://insurify.com/homeowners-insurance/alabama/birmingham/'),'2026'],
+    ['Landlord insurance','Homeowner rate + 10% (DP-3)',src('Alabama landlord avg ≈ $1,761/yr, range $1,200–$2,200','https://tcdsagency.com/landlord-insurance'),'2026'],
+    ['Rent by bedrooms','Metro base 2 BR $1,266 · 3 BR $1,583 · 4 BR $1,801, then × an area factor (0.85–1.30)',src('HUD FY2026 Fair Market Rents, Birmingham-Hoover','https://www.huduser.gov/portal/datasets/fmr/fmr2026/FY2026_FMR_Schedule.pdf')+'; area factors are my estimate. Cross-check: '+src('RentCafe 3 BR avg $1,667','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'FY2026'],
+    ['Purchase closing costs','3% of price (Alabama range 2–5%)',src('Rocket Mortgage: Alabama closing costs','https://www.rocketmortgage.com/learn/closing-costs-alabama'),'2026'],
+    ['Refi closing costs','2.5% of the new loan','Typical lender, title and appraisal costs; my estimate','2026'],
+    ['Property management','10% of collected rent; leasing fee 50% of one month',src('RenPro: Birmingham 8–12%, leasing 50–100%','https://renpro.com/property-management-cost-birmingham-al/'),'2026'],
+    ['Appreciation','3.0%/yr',src('Williams Group: Birmingham Q1 2026 +5.8% YoY; local forecasts 2–3%','https://www.thewilliamsgroupal.com/blog/greater-birmingham-market-update-june-2026/'),'Jun 2026'],
+    ['Rent growth','2.5%/yr',src('Birmingham average rent +2.7% YoY','https://www.rentcafe.com/average-rent-market-trends/us/al/birmingham/'),'Jul 2026'],
+    ['Expense growth','3.5%/yr','My estimate; insurance has been rising faster than inflation','2026'],
+    ['Vacancy, maintenance, CapEx','8% / 8% / 8% of rent','Common underwriting rules of thumb for older Birmingham housing stock','—'],
+    ['Utilities','Holding $150/mo · house hack $350/mo (incl. internet)','My estimate for a 3 BR in the Alabama Power / Spire service area','—']
+  ];
+  const areaRows = AREAS.map(a=>`<tr><td>${a.name}</td><td class="n">${a.county}</td><td class="n">${a.mills.toFixed(1)}</td><td class="n">${a.basis}</td><td class="n">${(a.mills*CLASS_II/10).toFixed(2)}%</td><td class="n">${(a.mills*CLASS_III/10).toFixed(2)}%</td><td class="n">${$(r25(FMR[2]*a.rf))} / ${$(r25(FMR[3]*a.rf))} / ${$(r25(FMR[4]*a.rf))}</td><td class="n">$${a.ins.toFixed(2)}</td></tr>`).join('');
+  document.getElementById('assume').innerHTML = `<header style="margin-bottom:10px"><h2>Assumptions and sources</h2><p class="small" style="margin:4px 0 0">Researched ${RESEARCHED}. The page does not fetch live data. Every default above can be overridden.</p></header>
+    <div class="scroll"><table><thead><tr><th>Item</th><th>Default</th><th>Source</th><th>As of</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td>${r[2]}</td><td class="n">${r[3]}</td></tr>`).join('')}</tbody></table></div>
+    <h3 style="margin:18px 0 8px">Area defaults</h3>
+    <div class="scroll"><table><thead><tr><th>Area</th><th>County</th><th>Total mills</th><th>Basis</th><th>Rental tax / yr</th><th>Owner tax / yr</th><th>Rent 2 / 3 / 4 BR</th><th>Ins. per $1k</th></tr></thead><tbody>${areaRows}</tbody></table></div>
+    <p class="small"><b>reported</b>: total published for the city. <b>derived</b>: built from DOR components (Jefferson base = state 6.5 + county 13.5 + countywide school 8.2, then district school + city levy; Shelby base = state 6.5 + county 7.5 + school, then city levy). <b>estimate</b>: a component was not published in a form I could verify. Check your parcel with the county assessor. Millage varies inside a city by school district and special districts. Tax % columns are percent of market value per year, before exemptions.</p>`;
+}
+
+/* ---------- area bar ---------- */
+function renderAreaBar(R){
+  const a=R.area;
+  document.getElementById('areabar').innerHTML = `<span><b>${a.name}</b> · ${a.county} County</span>
+    <span>${R.mills.toFixed(1)} mills → rental ${(R.mills*CLASS_II/10).toFixed(2)}% of value/yr · owner-occupied ${(R.mills*CLASS_III/10).toFixed(2)}%</span>
+    <span>${R.beds} BR typical rent ${$(R.auto.rent)}/mo</span>
+    <span class="note">${a.id==='other'?'Enter your own millage, rent and insurance.':'Area defaults are editable in each section.'}</span>`;
+  const mh=document.getElementById('mills_hint'); if(mh) mh.textContent = `Area default ${a.mills.toFixed(1)} mills (${a.basis})`;
+}
+
+/* ---------- main update ---------- */
+let SAVE_T;
+function readState2(){ const s=readState(); ['appr','rentG','expG'].forEach(id=>{ const el=document.getElementById(id); s[id]= el? parseNum(el.value).v : Number(DEFAULTS[id]); }); const hs=document.getElementById('hhScen'); s.hhScen = hs?hs.value:'live'; return s; }
+function update(){
+  const s = readState2();
+  const mode = s.mode;
+  document.querySelectorAll('[data-mode]').forEach(el=>{ const m=el.dataset.mode; el.hidden = !(m==='both'||m===mode); });
+  document.getElementById('rehabLumpBox').hidden = s.rehabMode==='items';
+  document.getElementById('rehabItemsBox').hidden = s.rehabMode!=='items';
+  document.getElementById('loanFields').hidden = s.finMode==='cash';
+  document.getElementById('loanFields').style.display = s.finMode==='cash' ? 'none' : 'contents';
+  document.getElementById('pmFields').hidden = s.mgmt!=='pm';
+  document.getElementById('secRent_t').textContent = mode==='hh' ? 'When I move out: full rental' : 'Rental';
+  const rd=document.getElementById('secRent_d'); if(!rd){ const hdr=document.querySelector('#secRent header'); const p=document.createElement('p'); p.id='secRent_d'; hdr.appendChild(p); }
+  document.getElementById('secRent_d').textContent = mode==='hh'
+    ? 'Once you move out, the house is taxed as a rental (Class II, 20%) and needs a landlord policy. These checks use the same loan.'
+    : 'Taxed as Class II (20% of value) on the ARV. Tax and insurance fill from the area and can be overridden.';
+
+  const R = calc(s);
+  solveFixes(s,R);
+  const V = verdict(R);
+  syncAutos(R);
+  document.getElementById('rehabTotal').textContent = `${$(R.rehab)} (${$(R.rehabBase)} + ${fin(s.contPct)}%)`;
+  if(mode!=='hh'){
+    document.getElementById('holdLoanOut').textContent = R.cash ? 'None (cash purchase)' : `${$(R.pi)}/mo × ${R.m} = ${$(R.hLoan)} (${$(R.hInt)} interest)`;
+    document.getElementById('seasonNote').hidden = !(fin(s.seasoning) > R.m);
+  } else {
+    const w=document.getElementById('roomWarn');
+    w.hidden = R.roomsOk; w.textContent = `You entered ${R.rooms} rented + ${R.myRooms} kept = ${R.rooms+R.myRooms} bedrooms, but the house has ${R.beds}.`;
+  }
+  renderAreaBar(R);
+  renderResults(s,R,V);
+  renderProjection(s,R);
+  clearTimeout(SAVE_T); SAVE_T=setTimeout(save,400);
+}
+
+/* ---------- persistence (per-viewer convenience only) ---------- */
+const KEY='bham-brrrr-v1';
+function save(){
+  try{
+    const vals={}; RADIOS.forEach(n=>vals[n]=getRadio(n));
+    SELECTS.forEach(id=>{ const el=document.getElementById(id); if(el) vals[id]=el.value; });
+    Object.keys(FIELDS).forEach(id=>{ if(!AUTO_KEYS.includes(id)) { const el=document.getElementById(id); if(el) vals[id]=el.value; } });
+    localStorage.setItem(KEY, JSON.stringify({vals,ov:OV}));
+  }catch(e){}
+}
+function restore(){
+  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); return true; }catch(e){ return false; }
+}
+
+/* ---------- events ---------- */
+document.getElementById('inputs').addEventListener('input',e=>{
+  const id=e.target.id;
+  if(AUTO_KEYS.includes(id)){ const p=parseNum(e.target.value); if(p.blank||p.bad) delete OV[id]; else OV[id]=p.v; }
+  if(id==='contPct'){ document.getElementById('contPct2').value=e.target.value; }
+  if(id==='contPct2'){ document.getElementById('contPct').value=e.target.value; }
+  update();
+});
+document.getElementById('inputs').addEventListener('change',e=>{
+  if(e.target.id==='beds'){ delete OV.rent; delete OV.roomRent; }
+  update();
+});
+document.getElementById('inputs').addEventListener('focusout',e=>{ if(AUTO_KEYS.includes(e.target.id)) update(); });
+document.getElementById('inputs').addEventListener('click',e=>{
+  const b=e.target.closest('button.tag'); if(!b) return; delete OV[b.dataset.autotag]; update();
+});
+document.querySelectorAll('input[name="mode"]').forEach(el=>el.addEventListener('change',update));
+document.getElementById('area').addEventListener('change',()=>{ AUTO_KEYS.forEach(k=>delete OV[k]); update(); });
+document.getElementById('btnSample').addEventListener('click',()=>{ loadSample(); update(); toast('Sample deal loaded'); });
+document.getElementById('btnNew').addEventListener('click',()=>{ newDeal(); update(); });
+document.getElementById('proj').addEventListener('toggle',update);
+
+applyValues(DEFAULTS);
+if(!restore()) loadSample();
+renderAssumptions();
+update();
+</script>
+</body>
+</html>
