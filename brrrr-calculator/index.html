@@ -522,6 +522,25 @@ function areaForCity(city, t, zip){
   }
   return null;
 }
+function housePrice(n,u,small){
+  // money as people type it in deal posts: "$86,500k" (typo) = $86,500, "$250" for an ARV = $250,000
+  let x = parseFloat(String(n).replace(/,/g,'')); if(!isFinite(x)) return NaN;
+  u = (u||'').toLowerCase();
+  if(u==='k'||u==='thousand'){ x *= 1e3; if(x>5e6 && x/1e3>=1000) x /= 1e3; }
+  else if(u==='m'||u==='mil'||u==='million'){ x *= 1e6; if(x>5e7) x /= 1e6; }
+  else if(x>0 && x<small) x *= 1e3;
+  return x;
+}
+function looseMoney(t,labels,small,min,max){
+  // "Label $X", "Label: X", "~Label = $Xk +/-", "Label is about $X": no colon needed
+  const re = new RegExp("\\b(?:"+labels+")\\b[ \\t]*(?:[:=~\\-–—]+|is|of|at|@|around|about|approx\\.?|roughly|est\\.?)?[ \\t]*(?:[:=~\\-–—]|around|about|approx\\.?|roughly)?[ \\t]*(?:\\$|usd)?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?)(?:[ \\t]*(?:-|–|to)[ \\t]*\\$?[ \\t]*(\\d[\\d,]*(?:\\.\\d+)?))?[ \\t]*(k|m|mil|million|thousand)?(?![a-z\\d])","gi");
+  let m; while((m=re.exec(t))){
+    const a=housePrice(m[1],m[3],small), b=m[2]!=null ? housePrice(m[2],m[3],small) : a;
+    const lo=Math.min(a,b), hi=Math.max(a,b);
+    if(lo>=min && hi<=max) return {val:lo, high:hi, range:hi>lo, raw:m[0].trim()};
+  }
+  return null;
+}
 function cleanStreet(raw){
   // keep only the street: drop leading "3 bd 2 ba 1,380 sqft ·" style text
   const t = String(raw).split(/\s[·|•–-]\s|\t|\s{2,}/).pop().trim();
@@ -543,13 +562,22 @@ function parseListing(text){
 
   // price
   let p = labeled(t,"list(?:ing)? price|asking price|price|sale price|listed (?:for|at)|offered at",10000);
-  if(!p){ m = new RegExp("(?:listed (?:for|at)|asking|offered at|priced at|price of)\\s*"+LNUM,"i").exec(t); if(m && toMoney(m[1],m[2])>=10000) p={val:toMoney(m[1],m[2])}; }
+  if(p && p.val>5e6){ const v=housePrice(p.val/1e3,'k',0); p = v<=5e6 ? {val:v} : null; }
+  if(!p) p = looseMoney(t,"purchase price|contract price|asking price|wholesale price|buy price|list price|sale price|asking|price|pp|priced at|offered at|listed (?:for|at)|price of",5000,10000,5e6);
   if(!p){ const re=/(?:^|\n)[ \t]*\$[ \t]?(\d{1,3}(?:,\d{3})+|\d{5,7})(?![\d,])(?![^\n]{0,12}(?:\/\s?mo|per month|a month|monthly|\/month))/g; while((m=re.exec(t))){ const v=toMoney(m[1]); if(v>=10000){ p={val:v}; break; } } }
   if(p) f.price = p.val;
+
+  // deal posts often state ARV and rehab outright
+  const av = looseMoney(t,"arv|after[- ]repair(?:ed)? value|after repair|resale value|value after repairs?|comps? (?:at|around|support)",5000,20000,5e6);
+  if(av) f.arv = av.val;
+  const rh = looseMoney(t,"rehab(?: estimate| budget| costs?| needed)?|repairs?(?: estimate| needed| costs?| budget)?|est\\.? repairs|estimated repairs|renovation(?: budget| costs?)?|reno(?: budget)?|construction budget",1000,1000,1e6);
+  if(rh){ f.rehab = rh.high; f.rehabRange = rh.range ? [rh.val, rh.high] : null; }
+  if(av && av.range) f.arvRange = [av.val, av.high];
 
   // beds / baths / sqft / year
   m = /\b(?:beds|bedrooms|bdrms?)[ \t]*:[ \t]*(\d{1,2})(?![\d,])/i.exec(t) || /\b(\d{1,2})[ \t]*\n?[ \t]*(?:bd|bds|beds?|bedrooms?|br)\b/i.exec(t) || /\b(?:beds|bedrooms)[ \t]*\n[ \t]*(\d{1,2})(?![\d,])/i.exec(t);
   if(m) f.beds = +m[1];
+  if(!f.beds && (m = /(?:^|[^\d\/.,$])([1-6])[ \t]*\/[ \t]*([1-4](?:\.5)?)(?![\d\/]|[.,]\d)/.exec(t))){ f.beds = +m[1]; f.baths = +m[2]; }
   m = /\b(?:baths|bathrooms|total baths)[ \t]*:[ \t]*(\d{1,2}(?:\.\d{1,2})?)(?![\d,])/i.exec(t) || /\b(\d{1,2}(?:\.\d{1,2})?)[ \t]*\n?[ \t]*(?:ba|baths?|bathrooms?)\b/i.exec(t) || /\b(?:baths|bathrooms)[ \t]*\n[ \t]*(\d{1,2}(?:\.\d)?)(?![\d,])/i.exec(t);
   if(m) f.baths = +m[1];
   { const cands=[]; let re=/(\d{1,2},\d{3}|\d{3,5})[ \t]*\n?[ \t]*(?:sq\.?[ \t]?ft\.?|sqft|square feet|sf)\b/gi;
@@ -565,6 +593,7 @@ function parseListing(text){
   if(m && toMoney(m[1],m[2])>=300){ f.rent=toMoney(m[1],m[2]); f.rentSrc='current lease'; }
   else { m = new RegExp("(?:rent zestimate|rent estimate|estimated rent|rental estimate|market rent|est\\.? rent)[^\\n$]{0,25}"+LNUM,"i").exec(t);
     if(m && toMoney(m[1],m[2])>=300 && toMoney(m[1],m[2])<20000){ f.rent=toMoney(m[1],m[2]); f.rentSrc='online rent estimate'; } }
+  if(!f.rent){ const lr = looseMoney(t,"rents? for|market rent|est\\.? rent|rent(?:al)? (?:income|est(?:imate)?)|rent",0,300,20000); if(lr){ f.rent=lr.val; f.rentSrc='rent stated in the listing'; } }
 
   // HOA
   if(/\b(?:no hoa|hoa(?: fee| dues)?[ \t]*:?[ \t]*(?:none|no|\$0|n\/a))\b/i.test(t)) f.hoa = 0;
@@ -598,6 +627,8 @@ function parseListing(text){
 
   // flags
   const F=(lvl,title,note)=>f.flags.push([lvl,title,note]);
+  if(/wholesal|assignment|assign(?:able|ing)|double[- ]close|\bemd\b|off[- ]market|walk[- ]?through video|proof of funds|\bpof\b/i.test(t))
+    F('info','Wholesale / off-market post','You’d usually buy an assigned contract. The price may include an assignment fee, and ARV and rehab are the seller’s numbers, so check both.');
   if(/cash only|cash buyers? only|cash offers only|cash or hard money|cash\/hard money|will not (?:qualify|appraise|finance)|not (?:qualify|eligible) for (?:conventional|fha|va|traditional) (?:financing|loans?)|non[- ]?financeable|not financeable/i.test(t)){
     f.cashOnly = true; F('fail','Cash or hard money only','The listing says it won’t qualify for a regular loan, so purchase financing is switched to cash.'); }
   if(/foundation (?:issue|problem|repair|crack|work|settling)|structural (?:issue|damage|problem|repair)|fire damage|water damage|\bmold\b|sinkhole|condemned/i.test(t))
@@ -1202,6 +1233,8 @@ function applyListing(f){
     // new property: the last deal's ARV and rehab no longer apply
     ['arv','rehabLump',...ITEMS.map(([k])=>'ri_'+k)].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   }
+  if(f.arv>0) set('arv', f.arv);
+  if(f.rehab>0){ set('rehabLump', f.rehab); const r=document.getElementById('rehabMode_lump'); if(r) r.checked=true; }
   if(f.rent>0) OV.rent = f.rent;
   if(f.price>0){ COMPS=[]; ['subjSqft','subjBeds','subjBaths'].forEach(id=>{ document.getElementById(id).value=''; }); }
   if(f.sqft) document.getElementById('subjSqft').value = fmtIn(f.sqft);
@@ -1229,7 +1262,9 @@ function renderFound(){
     row(true,'Listed property tax', $(f.tax)+'/yr', `${f.taxYear?f.taxYear+' bill. ':''}${f.taxMonthly?'Converted from a monthly figure. ':''}This is usually the seller’s owner-occupied bill (Class III, with homestead).${base? ` As a rental at the list price, expect about ${$(rental)}/yr (Class II at ${mills.toFixed(1)} mills).`:''}`);
   }
   if(f.estValue) row(true,'Online value estimate', $(f.estValue), 'Values the house as-is. It is not an ARV; use sold comps of renovated houses.');
-  row(false,'ARV', 'Enter it', 'Listings don’t give an after-repair value. Use recent sales of renovated houses nearby.');
+  if(f.arv>0) row(true,'ARV', $(f.arv), `${f.arvRange?`Listed as ${$(f.arvRange[0])}–${$(f.arvRange[1])}; using the low end. `:''}This is the seller’s number and is set as your ARV. Check it with sold comps below before you trust it.`);
+  else row(false,'ARV', 'Enter it', 'Not in the listing. Use recent sales of renovated houses nearby (sold comps section below).');
+  if(f.rehab>0) row(true,'Rehab', $(f.rehab), `${f.rehabRange?`Listed as ${$(f.rehabRange[0])}–${$(f.rehabRange[1])}; using the high end. `:''}Set as your rehab budget, plus your ${fin(Number(document.getElementById('contPct').value)||0)}% contingency. Seller rehab estimates often run low, so get a contractor walk-through.`);
   if(f.dom!=null) row(true,'Days on market', String(f.dom), f.dom>=60 ? 'Sitting a while, so there may be room to negotiate' : '');
   if(f.priceCut) row(true,'Price cut', f.priceCut===true ? 'Yes' : $(f.priceCut));
   if(f.type) row(true,'Property type', f.type.replace(/\b\w/g,c=>c.toUpperCase()));
@@ -1243,8 +1278,9 @@ function readListing(){
   const f=parseListing(txt);
   LISTING={text:txt, facts:f};
   applyListing(f); renderCompTable(); update();
-  const n=['price','beds','areaId','rent'].filter(k=>f[k]).length;
-  toast(`Read ${n} of 4 key details. Now enter ARV and rehab.`);
+  const n=['price','beds','areaId','rent','arv','rehab'].filter(k=>f[k]).length;
+  const miss=[!f.arv&&'ARV',!f.rehab&&'rehab'].filter(Boolean);
+  toast(`Read ${n} of 6 key details.${miss.length?` Now enter ${miss.join(' and ')}.`:''}`);
   clearTimeout(SAVE_T); save();
 }
 document.getElementById('lfRead').addEventListener('click',readListing);
