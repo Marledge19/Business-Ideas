@@ -102,6 +102,28 @@ button.tag:hover{text-decoration:underline}
 .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-bottom:12px}
 .row .lbl{font-size:12.5px;font-weight:600;color:var(--muted)}
 .items{margin-top:12px}
+.lf>summary{list-style:none;cursor:pointer;display:flex;justify-content:space-between;align-items:center;gap:8px}
+.lf>summary::-webkit-details-marker{display:none}
+.lf>summary .tw{color:var(--accent);font-weight:650;font-size:13px}
+.lf[open]>summary .tw .o{display:none}
+.lf:not([open])>summary .tw .c{display:none}
+.lf .help{color:var(--muted);font-size:13px;margin:10px 0 8px;display:block}
+.lf textarea{width:100%;min-height:130px;resize:vertical;font:13px/1.45 var(--font);padding:9px 10px;border:1px solid var(--line-strong);border-radius:8px;background:var(--sunk);color:var(--ink)}
+.lf textarea:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.lf .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.found{list-style:none;margin:8px 0 0;padding:0}
+.found li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:0 10px;padding:7px 0;border-top:1px dashed var(--line);font-size:13px}
+.found .k{color:var(--muted)}
+.found .fv{font-weight:650;text-align:right;font-variant-numeric:tabular-nums}
+.found li.miss .fv{color:var(--warn)}
+.found small{grid-column:1/-1;color:var(--faint);font-size:12px}
+.lfhead{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:14px 0 2px}
+.lflags{display:flex;flex-direction:column;gap:6px;margin-top:10px}
+.lflag{border-radius:8px;padding:8px 10px;font-size:13px}
+.lflag b{display:block}
+.lflag.fail{background:var(--fail-bg)} .lflag.fail b{color:var(--fail)}
+.lflag.warn{background:var(--warn-bg)} .lflag.warn b{color:var(--warn)}
+.lflag.info{background:var(--sunk);border:1px solid var(--line)} .lflag.info b{color:var(--ink)}
 
 /* results */
 .results{display:flex;flex-direction:column;gap:12px}
@@ -460,6 +482,116 @@ function verdict(R){
   return {level:'warn', word:'Marginal', why:`Close, but misses ${names}.${firstFix?' '+firstFix+'.':''}`};
 }
 
+/* ---------- listing reader (Zillow / Redfin / Realtor.com / MLS text) ---------- */
+const LNUM = "\\$?[ \\t]?(\\d[\\d,]*(?:\\.\\d+)?)[ \\t]?(k|m)?\\b";
+function toMoney(n,u){ let x = parseFloat(String(n).replace(/,/g,'')); if(!isFinite(x)) return NaN; u=(u||'').toLowerCase(); if(u==='k') x*=1e3; else if(u==='m') x*=1e6; return x; }
+function labeled(t,labels,minVal){
+  // "Label: $X" on one line, or "Label" on its own line with the value on the next (listing fact boxes)
+  const re1 = new RegExp("(?:^|\\n)[ \\t•*-]*(?:"+labels+")[ \\t]*:?[ \\t]*\\n[ \\t]*"+LNUM, "ig");
+  const re2 = new RegExp("\\b(?:"+labels+")[ \\t]*(?::|–|-)[ \\t]*"+LNUM, "ig");
+  for(const re of [re1,re2]){ let m; while((m=re.exec(t))){ const v=toMoney(m[1],m[2]); if(v>=(minVal||0)) return {val:v, end:m.index+m[0].length, tail:t.slice(m.index+m[0].length, m.index+m[0].length+30)}; } }
+  return null;
+}
+const CITY_AREAS = [
+  [/vestavia(?: hills)?/i,'vest'],[/homewood/i,'home'],[/trussville/i,'truss'],[/irondale/i,'iron'],[/center ?point/i,'cp'],
+  [/fultondale/i,'fult'],[/gardendale/i,'gard'],[/bessemer/i,'bess'],[/leeds/i,'leeds'],[/pelham/i,'pel'],[/alabaster/i,'alab'],
+  [/chelsea/i,'chel'],[/hoover/i,'hoover'],[/birmingham/i,'bham']
+];
+function areaForCity(city, t, zip){
+  for(const [re,id] of CITY_AREAS) if(re.test(city)){
+    if(id==='hoover') return (/shelby county/i.test(t) || zip==='35242') ? 'hoovs' : 'hoovj';
+    return id;
+  }
+  return null;
+}
+function parseListing(text){
+  const t = String(text||'').replace(/\r/g,'').replace(/ /g,' ').replace(/[®™]/g,'');
+  const f = {flags:[]}; let m;
+
+  // address and area
+  m = /(\d{1,6}[^\n,$]{2,60}),\s*([A-Za-z .'-]{3,30}?),\s*(?:AL|Alabama)\.?\s*(\d{5})?/i.exec(t);
+  if(m){ f.street=m[1].trim(); f.city=m[2].trim(); f.zip=m[3]||''; f.address=`${f.street}, ${f.city}, AL${f.zip?' '+f.zip:''}`; }
+  else { m = /\b([A-Za-z .'-]{3,30}?),\s*(?:AL|Alabama)\b\.?\s*(\d{5})?/i.exec(t); if(m){ f.city=m[1].trim().split(/\s{2,}|\n/).pop(); f.zip=m[2]||''; } }
+  if(f.city){ f.areaId = areaForCity(f.city, t, f.zip); if(!f.areaId) f.areaId='other'; }
+  else { for(const [re,id] of CITY_AREAS){ if(re.test(t)){ f.city = (t.match(re)||[''])[0]; f.areaId = id==='hoover' ? (/shelby county/i.test(t)?'hoovs':'hoovj') : id; break; } } }
+  if(f.areaId==='bham' && /shelby county/i.test(t)) f.flags.push(['warn','Birmingham mailing address in Shelby County','This is likely unincorporated Shelby County, not the city of Birmingham. Taxes are lower; pick Other (manual) and enter the millage from your tax bill.']);
+
+  // price
+  let p = labeled(t,"list(?:ing)? price|asking price|price|sale price|listed (?:for|at)|offered at",10000);
+  if(!p){ m = new RegExp("(?:listed (?:for|at)|asking|offered at|priced at|price of)\\s*"+LNUM,"i").exec(t); if(m && toMoney(m[1],m[2])>=10000) p={val:toMoney(m[1],m[2])}; }
+  if(!p){ const re=/(?:^|\n)[ \t]*\$[ \t]?(\d{1,3}(?:,\d{3})+|\d{5,7})(?![\d,])(?![^\n]{0,12}(?:\/\s?mo|per month|a month|monthly|\/month))/g; while((m=re.exec(t))){ const v=toMoney(m[1]); if(v>=10000){ p={val:v}; break; } } }
+  if(p) f.price = p.val;
+
+  // beds / baths / sqft / year
+  m = /\b(?:beds|bedrooms|bdrms?)[ \t]*:[ \t]*(\d{1,2})(?![\d,])/i.exec(t) || /\b(\d{1,2})[ \t]*\n?[ \t]*(?:bd|bds|beds?|bedrooms?|br)\b/i.exec(t) || /\b(?:beds|bedrooms)[ \t]*\n[ \t]*(\d{1,2})(?![\d,])/i.exec(t);
+  if(m) f.beds = +m[1];
+  m = /\b(?:baths|bathrooms|total baths)[ \t]*:[ \t]*(\d{1,2}(?:\.\d{1,2})?)(?![\d,])/i.exec(t) || /\b(\d{1,2}(?:\.\d{1,2})?)[ \t]*\n?[ \t]*(?:ba|baths?|bathrooms?)\b/i.exec(t) || /\b(?:baths|bathrooms)[ \t]*\n[ \t]*(\d{1,2}(?:\.\d)?)(?![\d,])/i.exec(t);
+  if(m) f.baths = +m[1];
+  { const cands=[]; let re=/(\d{1,2},\d{3}|\d{3,5})[ \t]*\n?[ \t]*(?:sq\.?[ \t]?ft\.?|sqft|square feet|sf)\b/gi;
+    while((m=re.exec(t))) cands.push([m.index,m[1],m[0].length]);
+    re=/(?:sq\.?[ \t]?ft\.?|sqft|square feet|living area)[^\n\d$]{0,14}(\d{1,2},\d{3}|\d{3,5})(?![\d,])/gi;
+    while((m=re.exec(t))) cands.push([m.index,m[1],m[0].length]);
+    cands.sort((a,b)=>a[0]-b[0]);
+    for(const [i,num,len] of cands){ const before=t.slice(Math.max(0,i-20),i), after=t.slice(i+len,i+len+6); if(/lot/i.test(before)||/^\s*lot/i.test(after)) continue; const v=toMoney(num); if(v>=300 && v<=10000){ f.sqft=v; break; } } }
+  m = /(?:built in|year built|yr built)[ \t]*:?[ \t]*\n?[ \t]*((?:18|19|20)\d{2})\b/i.exec(t); if(m) f.year = +m[1];
+
+  // rent: current lease beats an online estimate
+  m = new RegExp("(?:currently (?:rented|leased)(?: for| at)?|leased (?:for|at)|rents? for|current rent|tenant pays|lease amount|monthly rent)[^\\n$]{0,20}"+LNUM,"i").exec(t);
+  if(m && toMoney(m[1],m[2])>=300){ f.rent=toMoney(m[1],m[2]); f.rentSrc='current lease'; }
+  else { m = new RegExp("(?:rent zestimate|rent estimate|estimated rent|rental estimate|market rent|est\\.? rent)[^\\n$]{0,25}"+LNUM,"i").exec(t);
+    if(m && toMoney(m[1],m[2])>=300 && toMoney(m[1],m[2])<20000){ f.rent=toMoney(m[1],m[2]); f.rentSrc='online rent estimate'; } }
+
+  // HOA
+  if(/\b(?:no hoa|hoa(?: fee| dues)?[ \t]*:?[ \t]*(?:none|no|\$0|n\/a))\b/i.test(t)) f.hoa = 0;
+  else {
+    m = /hoa[^\n$]{0,30}\$[ \t]?(\d[\d,]*)(?:[ \t]*(?:\/|per|a|each)?[ \t]*(mo|month|monthly|yr|year|annual|annually|quarter|quarterly|qtr))?/i.exec(t) ||
+        /\$[ \t]?(\d[\d,]*)[ \t]*(monthly|annual|annually|yearly|quarterly)?[ \t]*hoa/i.exec(t);
+    if(m){ const v=toMoney(m[1]), per=(m[2]||'').toLowerCase(); f.hoa = /^(yr|year|annual|yearly)/.test(per) ? v/12 : /^(quarter|qtr)/.test(per) ? v/3 : v; f.hoaPer = per||'month (assumed)'; }
+  }
+
+  // listed property tax (usually the seller's owner-occupied bill)
+  m = /tax history[\s\S]{0,160}?\b((?:19|20)\d{2})[ \t]+\$[ \t]?(\d[\d,]*)/i.exec(t);
+  if(m){ f.tax = toMoney(m[2]); f.taxYear = +m[1]; }
+  else {
+    const ann = labeled(t,"annual tax(?:es)?(?: amount)?|tax amount|annual property tax(?:es)?",20);
+    const tx = ann || labeled(t,"property tax(?:es)?|taxes",20);
+    if(tx){ const mo = /^[^\n]{0,12}(?:\/\s?mo|per month|a month|monthly)/i.test(tx.tail) || (!ann && tx.val < 250); f.tax = mo ? tx.val*12 : tx.val; f.taxMonthly = mo; }
+  }
+
+
+  // online value estimate (not an ARV)
+  { const re = new RegExp("(zestimate|redfin estimate|estimated value|est\\.? value|home value estimate)[ \\t]*:?[ \\t]*\\n?[^\\n$]{0,20}"+LNUM,"ig");
+    while((m=re.exec(t))){ const before=t.slice(Math.max(0,m.index-6),m.index); if(/rent\s*$/i.test(before)) continue; const v=toMoney(m[2],m[3]); if(v>=10000){ f.estValue=v; break; } } }
+
+  m = /(\d{1,4})[ \t]+days?[ \t]+on[ \t]+(?:zillow|redfin|market|realtor\.com|site|homes\.com)/i.exec(t) || /days on (?:market|zillow|redfin)[ \t]*:?[ \t]*\n?[ \t]*(\d{1,4})\b/i.exec(t);
+  if(m) f.dom = +m[1];
+  m = new RegExp("price (?:cut|drop|reduced|reduction|change)[^\\n$]{0,20}"+LNUM,"i").exec(t);
+  if(m) f.priceCut = toMoney(m[1],m[2]); else if(/price (?:cut|drop|reduced|improvement)/i.test(t)) f.priceCut = true;
+
+  m = /\b(single[- ]family|duplex|triplex|fourplex|quadruplex|condo(?:minium)?|townho(?:use|me)|mobile home|manufactured home)\b/i.exec(t);
+  if(m) f.type = m[1].toLowerCase();
+
+  // flags
+  const F=(lvl,title,note)=>f.flags.push([lvl,title,note]);
+  if(/cash only|cash buyers? only|cash offers only|cash or hard money|cash\/hard money|will not (?:qualify|appraise|finance)|not (?:qualify|eligible) for (?:conventional|fha|va|traditional) (?:financing|loans?)|non[- ]?financeable|not financeable/i.test(t)){
+    f.cashOnly = true; F('fail','Cash or hard money only','The listing says it won’t qualify for a regular loan, so purchase financing is switched to cash.'); }
+  if(/foundation (?:issue|problem|repair|crack|work|settling)|structural (?:issue|damage|problem|repair)|fire damage|water damage|\bmold\b|sinkhole|condemned/i.test(t))
+    F('fail','Structural or damage language','Mentions foundation, structural, fire, water or mold problems. Get a contractor bid and add the Foundation / structural line.');
+  if(/\bas[- ]is\b|investor special|handyman special|fixer|needs (?:work|tlc|some tlc|updating|repairs|a full rehab|everything|a lot of work)|\btlc\b|bring your (?:contractor|tools)|sweat equity/i.test(t))
+    F('warn','Sold as-is / needs work','Budget a full inspection. Heavy rehabs often can’t get a conventional purchase loan.');
+  if(/foreclos|bank[- ]owned|\breo\b|short sale|auction|hud home|probate|estate sale/i.test(t))
+    F('warn','Distressed sale','Foreclosure, bank-owned, auction, short sale or estate sale. Expect slower closings, fewer repairs and possible title issues.');
+  if(/tenant[- ]occupied|tenant in place|currently (?:rented|leased)|lease (?:ends|expires|through|until)|leased (?:until|through)/i.test(t)){
+    f.tenant = true; F('warn','Tenant in place','A tenant blocks a rehab until the lease ends. Ask for the lease, rent roll and deposit.'); }
+  if(/section 8|housing choice voucher|\bhcv\b/i.test(t)) F('info','Section 8 mentioned','Voucher rent is set by the Birmingham or Jefferson County housing authority payment standard, not the listing.');
+  if(/flood (?:zone|plain|insurance)|floodplain/i.test(t) && !/not in (?:a |the )?flood/i.test(t)) F('warn','Flood zone mentioned','Flood insurance is separate from landlord insurance. Add it under Other monthly costs.');
+  if(f.year && f.year < 1978) F('info',`Built ${f.year}, before 1978`,'Federal lead-paint disclosure rules apply to renting it out. Older Birmingham houses also often need electrical and sewer-line updates.');
+  if(f.type && /duplex|triplex|fourplex|quadruplex/.test(f.type)) F('warn',`Listed as a ${f.type}`,'This calculator models one house. Enter the combined rent of all units as the monthly rent.');
+  if(f.type && /condo|townho|mobile|manufactured/.test(f.type)) F('warn',`Listed as a ${f.type}`,'Insurance, HOA and financing differ from a single-family house. Check the auto insurance figure and HOA.');
+  if(f.beds && (f.beds<2 || f.beds>4)) F('info',`${f.beds} bedrooms`,`Area rent defaults cover 2–4 bedrooms, so ${f.beds<2?2:4} is selected. Override the rent if you know it.`);
+  return f;
+}
+
 /* ---------- 5-year projection ---------- */
 function project(s,R){
   const ap=fin(s.appr)/100, rg=fin(s.rentG)/100, eg=fin(s.expG)/100, o=R.ops;
@@ -512,6 +644,12 @@ function seg(name,opts,cls=''){ return `<div class="seg ${cls}" role="radiogroup
 function card(id,mode,title,desc,body){ return `<section class="card" id="${id}" data-mode="${mode}"><header><h2 id="${id}_t">${title}</h2>${desc?`<p id="${id}_d">${desc}</p>`:''}</header>${body}</section>`; }
 
 document.getElementById('inputs').innerHTML = [
+  `<details class="card lf" id="lfSec" open><summary><h2>Paste a listing</h2><span class="tw"><span class="o">Show</span><span class="c">Hide</span></span></summary>
+    <label for="lfText" class="help">Copy a Zillow, Redfin, Realtor.com or MLS page (Ctrl+A, Ctrl+C), or just the description, and paste it here. Price, bedrooms, area, rent, HOA and cash-only terms fill in below. ARV and rehab never come from a listing, so enter those yourself.</label>
+    <textarea id="lfText" rows="6" spellcheck="false" placeholder="$110,000&#10;3 bd 1 ba 1,184 sqft&#10;1245 43rd St N, Birmingham, AL 35222&#10;Rent Zestimate: $1,450/mo&#10;Investor special, sold as-is..."></textarea>
+    <div class="acts"><button type="button" class="btn primary" id="lfRead">Read listing</button><button type="button" class="btn" id="lfClear">Clear</button></div>
+    <div id="lfFound"></div>
+  </details>`,
   card('secProp','both','Property','Area defaults fill the tax rate, insurance and rent. Anything marked auto can be typed over; tap “edited · reset” to go back.',
     `<div class="fields">
       <div class="fld"><label for="beds">Bedrooms</label><div class="inp"><select id="beds" style="flex:1;border:0;background:transparent"><option value="2">2 bedrooms</option><option value="3">3 bedrooms</option><option value="4">4 bedrooms</option></select></div></div>
@@ -701,8 +839,11 @@ function hhBreakdownHTML(R){
 
 function renderResults(s,R,V){
   const pill = `<span class="pill ${V.level}">${{pass:'✓',warn:'!',fail:'✕',none:'…'}[V.level]} ${V.word.toUpperCase()}</span>`;
-  let h = `<div class="panel verdict"><div class="line">${pill}<span class="small">${R.mode==='hh'?'House hack':'BRRRR'} · ${R.area.name}</span></div><div class="why">${V.why}</div>
+  let h = `<div class="panel verdict"><div class="line">${pill}<span class="small">${R.mode==='hh'?'House hack':'BRRRR'} · ${LISTING.facts&&LISTING.facts.street?escapeHTML(LISTING.facts.street)+', ':''}${R.area.name}</span></div><div class="why">${V.why}</div>
     <div class="line"><button class="btn primary" id="btnCopy" type="button">Copy summary</button></div><div id="copyBox"></div></div>`;
+  if(R.incomplete){
+    h += `<div class="panel small">Results appear once the deal has a purchase price${R.ARV>0?'':' and an ARV'}. ${R.P>0&&!(R.ARV>0)?'For the ARV, use recent sales of renovated houses of the same size nearby.':''}</div>`;
+  } else {
   if(R.mode!=='hh'){
     const inf = R.incomplete ? '' : (R.infinite
       ? `<div class="chip pass">∞ Infinite return: the refi hands back ${pct(R.returnedPct,0)} of your cash</div>`
@@ -744,6 +885,7 @@ function renderResults(s,R,V){
   }
   h += `<div class="panel"><div class="sectionhead"><h3>Tests</h3><span class="small">${R.tests.filter(t=>t.pass).length} of ${R.tests.length} pass</span></div>${R.incomplete?'<div class="small">Waiting for purchase price and ARV.</div>':testsHTML(R)}</div>`;
   h += `<div class="panel"><details class="more"><summary>Monthly breakdown</summary><div style="margin-top:8px">${R.mode==='hh'?'<h3 style="margin:6px 0">Living there</h3>'+hhBreakdownHTML(R)+'<h3 style="margin:14px 0 6px">After move-out</h3>':''}${breakdownHTML(R)}</div></details></div>`;
+  }
   document.getElementById('results').innerHTML = h;
   document.getElementById('btnCopy').onclick = ()=>copySummary(s,R,V);
   document.getElementById('mbar').innerHTML = `<span>${pill}</span><span class="m">${R.mode==='hh'?'Housing':'Cash flow'} <b>${R.mode==='hh'?$(R.housing):$(R.cf)}/mo</b> · ${R.tests.filter(t=>t.pass).length}/${R.tests.length} tests</span><a class="btn" href="#resultsCol">Results</a>`;
@@ -752,6 +894,8 @@ function renderResults(s,R,V){
 function summaryText(s,R,V){
   const L=[]; const isHH=R.mode==='hh';
   L.push(`${isHH?'HOUSE HACK':'BRRRR'} DEAL SUMMARY · ${R.area.name}, AL · ${R.beds} BR`);
+  const lf=LISTING.facts; if(lf&&lf.address) L.push(`Property: ${lf.address}${lf.sqft?` · ${lf.sqft.toLocaleString('en-US')} sq ft`:''}${lf.year?` · built ${lf.year}`:''}`);
+  if(lf&&lf.flags.length) L.push(`Listing flags: ${lf.flags.map(x=>x[1]).join('; ')}`);
   L.push(`Verdict: ${V.word.toUpperCase()} · ${V.why}`);
   L.push('');
   L.push(`Purchase ${$(R.P)} · ARV ${$(R.ARV)} · Rehab ${$(R.rehab)} (incl. ${fin(s.contPct)}% contingency)`);
@@ -912,7 +1056,7 @@ function update(){
     ? 'Once you move out, the house is taxed as a rental (Class II, 20%) and needs a landlord policy. These checks use the same loan.'
     : 'Taxed as Class II (20% of value) on the ARV. Tax and insurance fill from the area and can be overridden.';
 
-  const R = calc(s);
+  const R = calc(s); LAST_R = R;
   solveFixes(s,R);
   const V = verdict(R);
   syncAutos(R);
@@ -925,10 +1069,69 @@ function update(){
     w.hidden = R.roomsOk; w.textContent = `You entered ${R.rooms} rented + ${R.myRooms} kept = ${R.rooms+R.myRooms} bedrooms, but the house has ${R.beds}.`;
   }
   renderAreaBar(R);
+  renderFound();
   renderResults(s,R,V);
   renderProjection(s,R);
   clearTimeout(SAVE_T); SAVE_T=setTimeout(save,400);
 }
+
+/* ---------- listing ---------- */
+let LISTING = {text:'', facts:null};
+let LAST_R = null;
+function applyListing(f){
+  const set=(id,v)=>{ const el=document.getElementById(id); if(el) el.value = fmtIn(v,0); };
+  if(f.areaId){ document.getElementById('area').value = f.areaId; AUTO_KEYS.forEach(k=>delete OV[k]); }
+  if(f.beds){ document.getElementById('beds').value = String(clamp(f.beds,2,4)); delete OV.rent; delete OV.roomRent; }
+  if(f.price>0){
+    set('price', f.price);
+    // new property: the last deal's ARV and rehab no longer apply
+    ['arv','rehabLump',...ITEMS.map(([k])=>'ri_'+k)].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
+  }
+  if(f.rent>0) OV.rent = f.rent;
+  if(typeof f.hoa==='number') set('otherMo', Math.round(f.hoa));
+  if(f.price>0 || f.cashOnly){ const el=document.getElementById(f.cashOnly?'finMode_cash':'finMode_loan'); if(el) el.checked=true; }
+}
+function renderFound(){
+  const el=document.getElementById('lfFound'), f=LISTING.facts;
+  if(!f){ el.innerHTML=''; return; }
+  const rows=[], row=(ok,k,v,note)=>rows.push(`<li class="${ok?'':'miss'}"><span class="k">${k}</span><span class="fv">${v}</span>${note?`<small>${note}</small>`:''}</li>`);
+  const a = f.areaId ? areaOf(f.areaId) : null;
+  row(!!f.address||!!a, 'Address / area', f.address ? escapeHTML(f.address) : (a ? a.name : 'Not found'),
+      a ? (a.id==='other' ? `${escapeHTML(f.city||'This city')} isn’t in the area list, so Other (manual) is selected. Enter its millage from a tax bill.` : `Area set to ${a.name}`) : 'Pick the area at the top');
+  row(f.price>0,'List price', f.price>0 ? $(f.price) : 'Not found', f.price>0 ? (f.sqft ? `${$(f.price/f.sqft)} per sq ft` : '') : 'Enter the purchase price below');
+  const bb=[f.beds?f.beds+' bd':'', f.baths?f.baths+' ba':'', f.sqft?f.sqft.toLocaleString('en-US')+' sq ft':''].filter(Boolean).join(' · ');
+  row(!!f.beds,'Size', bb||'Not found', f.beds ? '' : 'Pick bedrooms below');
+  if(f.year) row(true,'Year built', String(f.year));
+  row(f.rent>0,'Rent', f.rent>0 ? $(f.rent)+'/mo' : 'Not found', f.rent>0 ? `From the ${f.rentSrc}; set as monthly rent. Check it against rented comps.` : 'Using the area default for this bedroom count');
+  if(typeof f.hoa==='number') row(true,'HOA', f.hoa ? $(f.hoa)+'/mo' : 'None', f.hoa ? `Added to Other monthly costs${/assumed/.test(f.hoaPer||'')?' (period not stated, assumed monthly)':''}` : 'Other monthly costs set to $0');
+  if(f.tax){
+    const mills = LAST_R ? LAST_R.mills : (a?a.mills:60), base = f.price||0;
+    const rental = base*CLASS_II*mills/1000;
+    row(true,'Listed property tax', $(f.tax)+'/yr', `${f.taxYear?f.taxYear+' bill. ':''}${f.taxMonthly?'Converted from a monthly figure. ':''}This is usually the seller’s owner-occupied bill (Class III, with homestead).${base? ` As a rental at the list price, expect about ${$(rental)}/yr (Class II at ${mills.toFixed(1)} mills).`:''}`);
+  }
+  if(f.estValue) row(true,'Online value estimate', $(f.estValue), 'Values the house as-is. It is not an ARV; use sold comps of renovated houses.');
+  row(false,'ARV', 'Enter it', 'Listings don’t give an after-repair value. Use recent sales of renovated houses nearby.');
+  if(f.dom!=null) row(true,'Days on market', String(f.dom), f.dom>=60 ? 'Sitting a while, so there may be room to negotiate' : '');
+  if(f.priceCut) row(true,'Price cut', f.priceCut===true ? 'Yes' : $(f.priceCut));
+  if(f.type) row(true,'Property type', f.type.replace(/\b\w/g,c=>c.toUpperCase()));
+  const flags = f.flags.length ? `<div class="lflags">${f.flags.map(([lvl,t,n])=>`<div class="lflag ${lvl}"><b>${{fail:'✕ ',warn:'! ',info:'i '}[lvl]||''}${t}</b>${n}</div>`).join('')}</div>` : '';
+  el.innerHTML = `<p class="lfhead">Found in the listing</p><ul class="found">${rows.join('')}</ul>${flags}`;
+}
+function escapeHTML(x){ return String(x).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function readListing(){
+  const txt=document.getElementById('lfText').value;
+  if(!txt.trim()){ toast('Paste a listing first'); return; }
+  const f=parseListing(txt);
+  LISTING={text:txt, facts:f};
+  applyListing(f); update();
+  const n=['price','beds','areaId','rent'].filter(k=>f[k]).length;
+  toast(`Read ${n} of 4 key details. Now enter ARV and rehab.`);
+  clearTimeout(SAVE_T); save();
+}
+document.getElementById('lfRead').addEventListener('click',readListing);
+document.getElementById('lfText').addEventListener('paste',()=>setTimeout(readListing,0));
+document.getElementById('lfClear').addEventListener('click',()=>{ LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; update(); toast('Listing cleared'); });
+function clearListing(){ LISTING={text:'',facts:null}; document.getElementById('lfText').value=''; }
 
 /* ---------- persistence (per-viewer convenience only) ---------- */
 const KEY='bham-brrrr-v1';
@@ -937,16 +1140,17 @@ function save(){
     const vals={}; RADIOS.forEach(n=>vals[n]=getRadio(n));
     SELECTS.forEach(id=>{ const el=document.getElementById(id); if(el) vals[id]=el.value; });
     Object.keys(FIELDS).forEach(id=>{ if(!AUTO_KEYS.includes(id)) { const el=document.getElementById(id); if(el) vals[id]=el.value; } });
-    localStorage.setItem(KEY, JSON.stringify({vals,ov:OV}));
+    localStorage.setItem(KEY, JSON.stringify({vals,ov:OV,listing:LISTING}));
   }catch(e){}
 }
 function restore(){
-  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); return true; }catch(e){ return false; }
+  try{ const raw=localStorage.getItem(KEY); if(!raw) return false; const d=JSON.parse(raw); OV=d.ov||{}; applyValues({...DEFAULTS,...d.vals}); if(d.listing&&d.listing.text){ LISTING=d.listing; document.getElementById('lfText').value=LISTING.text; } return true; }catch(e){ return false; }
 }
 
 /* ---------- events ---------- */
 document.getElementById('inputs').addEventListener('input',e=>{
   const id=e.target.id;
+  if(id==='lfText') return;
   if(AUTO_KEYS.includes(id)){ const p=parseNum(e.target.value); if(p.blank||p.bad) delete OV[id]; else OV[id]=p.v; }
   if(id==='contPct'){ document.getElementById('contPct2').value=e.target.value; }
   if(id==='contPct2'){ document.getElementById('contPct').value=e.target.value; }
@@ -962,8 +1166,8 @@ document.getElementById('inputs').addEventListener('click',e=>{
 });
 document.querySelectorAll('input[name="mode"]').forEach(el=>el.addEventListener('change',update));
 document.getElementById('area').addEventListener('change',()=>{ AUTO_KEYS.forEach(k=>delete OV[k]); update(); });
-document.getElementById('btnSample').addEventListener('click',()=>{ loadSample(); update(); toast('Sample deal loaded'); });
-document.getElementById('btnNew').addEventListener('click',()=>{ newDeal(); update(); });
+document.getElementById('btnSample').addEventListener('click',()=>{ clearListing(); loadSample(); update(); toast('Sample deal loaded'); });
+document.getElementById('btnNew').addEventListener('click',()=>{ clearListing(); newDeal(); update(); });
 document.getElementById('proj').addEventListener('toggle',update);
 
 applyValues(DEFAULTS);
