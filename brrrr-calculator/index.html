@@ -482,7 +482,12 @@ function solveFixes(s,R){
   }
 }
 function verdict(R){
-  if(R.incomplete) return {level:'none', word:'Needs input', why:'Enter a purchase price and an after-repair value (ARV) to run the tests.'};
+  if(R.incomplete){
+    const why = R.P>0 ? `Purchase price is ${$(R.P)}. Add the after-repair value (ARV) to run the tests.`
+              : R.ARV>0 ? `ARV is ${$(R.ARV)}. Add the purchase price to run the tests.`
+              : 'Enter a purchase price and an after-repair value (ARV) to run the tests.';
+    return {level:'none', word: R.P>0 ? 'Needs ARV' : R.ARV>0 ? 'Needs price' : 'Needs input', why};
+  }
   const f = R.tests.filter(t=>!t.pass), n = R.tests.length;
   const isHH = R.mode==='hh';
   if(!f.length){
@@ -638,6 +643,8 @@ function parseListing(text){
 
   // flags
   const F=(lvl,title,note)=>f.flags.push([lvl,title,note]);
+  if(/as[- ]is|investor special|handyman|fixer|needs (?:work|tlc|repairs|updating|a full rehab)|\btlc\b|cash only|foreclos|bank[- ]owned/i.test(t)) f.renovated = false;
+  else if(/renovat|remodel|fully updated|completely updated|totally updated|updated (?:throughout|top to bottom)|move[- ]in ready|turn[- ]?key|\bflip(?:ped)?\b|like new|brand[- ]new (?:roof|kitchen|hvac)|rehab(?:bed|ed)\b/i.test(t)) f.renovated = true;
   if(/wholesal|assignment|assign(?:able|ing)|double[- ]close|\bemd\b|off[- ]market|walk[- ]?through video|proof of funds|\bpof\b/i.test(t))
     F('info','Wholesale / off-market post','You’d usually buy an assigned contract. The price may include an assignment fee, and ARV and rehab are the seller’s numbers, so check both.');
   if(/cash only|cash buyers? only|cash offers only|cash or hard money|cash\/hard money|will not (?:qualify|appraise|finance)|not (?:qualify|eligible) for (?:conventional|fha|va|traditional) (?:financing|loans?)|non[- ]?financeable|not financeable/i.test(t)){
@@ -785,7 +792,7 @@ function card(id,mode,title,desc,body){ return `<section class="card" id="${id}"
 
 document.getElementById('inputs').innerHTML = [
   `<details class="card lf" id="lfSec" open><summary><h2>Paste a listing</h2><span class="tw"><span class="o">Show</span><span class="c">Hide</span></span></summary>
-    <label for="lfText" class="help">Copy a Zillow, Redfin, Realtor.com or MLS page (Ctrl+A, Ctrl+C), or just the description, and paste it here. Price, bedrooms, area, rent, HOA and cash-only terms fill in below. ARV and rehab never come from a listing, so enter those yourself.</label>
+    <label for="lfText" class="help">Copy a Zillow, Redfin, Realtor.com or MLS page (Ctrl+A, Ctrl+C), or just the description, and paste it here. Price, bedrooms, area, rent, HOA, and ARV and rehab when the post states them, fill in below. An already-renovated house uses its list price as the ARV.</label>
     <textarea id="lfText" rows="6" spellcheck="false" placeholder="$110,000&#10;3 bd 1 ba 1,184 sqft&#10;1245 43rd St N, Birmingham, AL 35222&#10;Rent Zestimate: $1,450/mo&#10;Investor special, sold as-is..."></textarea>
     <div class="acts"><button type="button" class="btn primary" id="lfRead">Read listing</button><button type="button" class="btn" id="lfClear">Clear</button></div>
     <div id="lfFound"></div>
@@ -997,7 +1004,7 @@ function renderResults(s,R,V){
   let h = `<div class="panel verdict"><div class="line">${pill}<span class="small">${R.mode==='hh'?'House hack':'BRRRR'} · ${LISTING.facts&&LISTING.facts.street?escapeHTML(LISTING.facts.street)+', ':''}${R.area.name}</span></div><div class="why">${V.why}</div>
     <div class="line"><button class="btn primary" id="btnCopy" type="button">Copy summary</button></div><div id="copyBox"></div></div>`;
   if(R.incomplete){
-    h += `<div class="panel small">Results appear once the deal has a purchase price${R.ARV>0?'':' and an ARV'}. ${R.P>0&&!(R.ARV>0)?'For the ARV, use recent sales of renovated houses of the same size nearby.':''}</div>`;
+    h += `<div class="panel small">${R.P>0?`Purchase price ${$(R.P)} is in.`:''} Results appear once the deal has ${R.P>0?'':'a purchase price'}${!(R.P>0)&&!(R.ARV>0)?' and ':''}${R.ARV>0?'':'an ARV'}. ${R.P>0&&!(R.ARV>0)?'For the ARV, use recent sales of renovated houses of the same size nearby.':''}</div>`;
   } else {
   if(R.mode!=='hh'){
     const inf = R.incomplete ? '' : (R.infinite
@@ -1245,6 +1252,7 @@ function applyListing(f){
     ['arv','rehabLump',...ITEMS.map(([k])=>'ri_'+k)].forEach(id=>{ const el=document.getElementById(id); if(el) el.value=''; });
   }
   if(f.arv>0) set('arv', f.arv);
+  else if(f.renovated && f.price>0){ set('arv', f.price); f.arvFromPrice = true; if(!(f.rehab>0)) set('rehabLump', 0); }
   if(f.rehab>0){ set('rehabLump', f.rehab); const r=document.getElementById('rehabMode_lump'); if(r) r.checked=true; }
   if(f.rent>0) OV.rent = f.rent;
   if(f.price>0){ COMPS=[]; ['subjSqft','subjBeds','subjBaths'].forEach(id=>{ document.getElementById(id).value=''; }); }
@@ -1273,7 +1281,8 @@ function renderFound(){
     row(true,'Listed property tax', $(f.tax)+'/yr', `${f.taxYear?f.taxYear+' bill. ':''}${f.taxMonthly?'Converted from a monthly figure. ':''}This is usually the seller’s owner-occupied bill (Class III, with homestead).${base? ` As a rental at the list price, expect about ${$(rental)}/yr (Class II at ${mills.toFixed(1)} mills).`:''}`);
   }
   if(f.estValue) row(true,'Online value estimate', $(f.estValue), 'Values the house as-is. It is not an ARV; use sold comps of renovated houses.');
-  if(f.arv>0) row(true,'ARV', $(f.arv), `${f.arvRange?`Listed as ${$(f.arvRange[0])}–${$(f.arvRange[1])}; using the low end. `:''}This is the seller’s number and is set as your ARV. Check it with sold comps below before you trust it.`);
+  if(f.arvFromPrice) row(true,'ARV', $(f.price), `Already renovated, so ARV is set to the list price and rehab to $0.${f.estValue?` The online estimate is ${$(f.estValue)}.`:''} Check it with sold comps below.`);
+  else if(f.arv>0) row(true,'ARV', $(f.arv), `${f.arvRange?`Listed as ${$(f.arvRange[0])}–${$(f.arvRange[1])}; using the low end. `:''}This is the seller’s number and is set as your ARV. Check it with sold comps below before you trust it.`);
   else row(false,'ARV', 'Enter it', 'Not in the listing. Use recent sales of renovated houses nearby (sold comps section below).');
   if(f.rehab>0) row(true,'Rehab', $(f.rehab), `${f.rehabRange?`Listed as ${$(f.rehabRange[0])}–${$(f.rehabRange[1])}; using the high end. `:''}Set as your rehab budget, plus your ${fin(Number(document.getElementById('contPct').value)||0)}% contingency. Seller rehab estimates often run low, so get a contractor walk-through.`);
   if(f.dom!=null) row(true,'Days on market', String(f.dom), f.dom>=60 ? 'Sitting a while, so there may be room to negotiate' : '');
@@ -1290,7 +1299,7 @@ function readListing(){
   LISTING={text:txt, facts:f};
   applyListing(f); renderCompTable(); update();
   const n=['price','beds','areaId','rent','arv','rehab'].filter(k=>f[k]).length;
-  const miss=[!f.arv&&'ARV',!f.rehab&&'rehab'].filter(Boolean);
+  const miss=[!(f.arv||f.arvFromPrice)&&'ARV',!(f.rehab||f.renovated)&&'rehab'].filter(Boolean);
   toast(`Read ${n} of 6 key details.${miss.length?` Now enter ${miss.join(' and ')}.`:''}`);
   clearTimeout(SAVE_T); save();
 }
